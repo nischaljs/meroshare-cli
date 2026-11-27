@@ -1,0 +1,260 @@
+<!doctype html>
+<!--
+  docs/media/flow.gif: one `ipo apply`, step by step.
+  A HyperFrames composition (a paused GSAP timeline). Render it with docs/media/src/render-flow.sh.
+  Open this file in a browser with #play at the end of the address to watch it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1800, height=1040" />
+    <title>ipo apply, step by step</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --ground: #ffffff;
+        --ink: #1f2328;
+        --muted: #57606a;
+        --line: #c9d1d9;
+        --cli: #6e56cf;
+        --cli-soft: #efeafd;
+        --mod: #0b7a75;
+        --mod-soft: #dff3f1;
+        --sock: #b35c00;
+        --sock-soft: #fff1e5;
+        --packet: #e5534b;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1800px; height: 1040px; overflow: hidden; background: var(--ground); }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        font-family: Inter, sans-serif;
+        color: var(--ink);
+      }
+      .mono { font-family: "JetBrains Mono", monospace; }
+      #frame { position: absolute; inset: 14px; border: 3px solid #d0d7de; border-radius: 36px; }
+      #title { position: absolute; left: 90px; top: 64px; font-size: 52px; font-weight: 700; letter-spacing: -0.01em; }
+      #subtitle { position: absolute; left: 90px; top: 136px; font-size: 30px; color: var(--muted); }
+
+      .box {
+        position: absolute;
+        border: 4px solid var(--line);
+        border-radius: 22px;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 30px;
+      }
+      .box .name { font-size: 40px; font-weight: 700; }
+      .box .what { font-size: 27px; color: var(--muted); margin-top: 6px; }
+      .box .tick { position: absolute; right: 22px; top: 16px; font-size: 34px; font-weight: 700; color: var(--mod); opacity: 0; }
+      .layer { position: absolute; font-size: 28px; font-weight: 700; letter-spacing: 0.02em; }
+
+      #cli { left: 90px; top: 210px; width: 420px; height: 110px; }
+      #cli .name { font-family: "JetBrains Mono", monospace; font-size: 40px; }
+
+      #session { left: 90px;   top: 400px; width: 370px; height: 160px; padding-bottom: 24px; }
+      #health  { left: 500px;  top: 400px; width: 370px; height: 160px; padding-bottom: 24px; }
+      #issues  { left: 910px;  top: 400px; width: 370px; height: 160px; padding-bottom: 24px; }
+      #apply   { left: 1320px; top: 400px; width: 390px; height: 160px; padding-bottom: 24px; }
+
+      #meroshare { left: 90px;   top: 660px; width: 1010px; height: 110px; }
+      #store     { left: 1130px; top: 660px; width: 270px;  height: 110px; padding: 0 24px; }
+      #notify    { left: 1430px; top: 660px; width: 280px;  height: 110px; padding: 0 24px; }
+
+      #wires { position: absolute; inset: 0; }
+
+      #packet {
+        position: absolute;
+        left: 0; top: 0;
+        width: 34px; height: 34px;
+        margin: -17px 0 0 -17px;
+        border-radius: 50%;
+        background: var(--packet);
+        box-shadow: 0 0 0 10px rgba(229, 83, 75, 0.18);
+      }
+
+      #caption {
+        position: absolute;
+        left: 90px; right: 90px; top: 812px; height: 160px;
+        border-radius: 22px;
+        background: #f6f8fa;
+        border: 3px solid #d0d7de;
+      }
+      .cap {
+        position: absolute;
+        left: 44px; right: 44px; top: 0; bottom: 0;
+        display: flex; align-items: center; gap: 34px;
+        opacity: 0;
+      }
+      .cap .step {
+        flex: none;
+        width: 76px; height: 76px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 36px; font-weight: 700; color: #fff; background: var(--mod);
+      }
+      .cap .text { font-size: 38px; line-height: 1.3; }
+      .cap .text b { font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="15" data-width="1800" data-height="1040">
+      <div id="frame"></div>
+      <div id="title">What happens when you type <span class="mono">ipo apply</span></div>
+      <div id="subtitle">One packet of work, from the command to MeroShare and back.</div>
+
+      <svg id="wires" width="1800" height="1040" viewBox="0 0 1800 1040">
+        <g fill="none" stroke="#d0d7de" stroke-width="5" stroke-linecap="round">
+          <path d="M460 265 L410 545" />
+          <path d="M410 545 H1660" />
+          <path d="M410 545 V660" /><path d="M1160 545 L1000 660" />
+          <path d="M1660 545 L1080 660" /><path d="M1660 545 L1370 660" />
+          <path d="M1370 660 H1680" />
+        </g>
+      </svg>
+
+      <div class="layer" style="left: 540px; top: 248px; color: var(--cli)">cli</div>
+      <div class="layer" style="left: 90px; top: 352px; color: var(--mod)">modules</div>
+      <div class="layer" style="left: 90px; top: 612px; color: var(--sock)">platform sockets</div>
+
+      <div id="cli" class="box"><div class="name">$ ipo apply</div></div>
+
+      <div id="session" class="box"><div class="name">session</div><div class="what">login, flags read</div><div class="tick">✓</div></div>
+      <div id="health" class="box"><div class="name">health</div><div class="what">blocked ones skipped</div><div class="tick">✓</div></div>
+      <div id="issues" class="box"><div class="name">issues</div><div class="what">the open IPOs</div><div class="tick">✓</div></div>
+      <div id="apply" class="box"><div class="name">apply</div><div class="what">one write, no retry</div><div class="tick">✓</div></div>
+
+      <div id="meroshare" class="box"><div class="name">meroshare</div><div class="what">every call to MeroShare goes through here</div><div class="tick">✓</div></div>
+      <div id="store" class="box"><div class="name">store</div><div class="what">config file</div><div class="tick">✓</div></div>
+      <div id="notify" class="box"><div class="name">notify</div><div class="what">screen, email</div><div class="tick">✓</div></div>
+
+      <div id="packet"></div>
+
+      <div id="caption">
+        <div id="cap0" class="cap"><div class="step">1</div><div class="text">You type <b>ipo apply</b>.</div></div>
+        <div id="cap1" class="cap"><div class="step">2</div><div class="text"><b>session</b> logs in to every account.</div></div>
+        <div id="cap2" class="cap"><div class="step">3</div><div class="text"><b>health</b> skips a blocked account.</div></div>
+        <div id="cap3" class="cap"><div class="step">4</div><div class="text"><b>issues</b> reads the open IPOs.</div></div>
+        <div id="cap4" class="cap"><div class="step">5</div><div class="text"><b>apply</b> sends one write. Never retried.</div></div>
+        <div id="cap5" class="cap"><div class="step">6</div><div class="text"><b>store</b> saves in one atomic write.</div></div>
+        <div id="cap6" class="cap"><div class="step">7</div><div class="text"><b>notify</b> shows you each result.</div></div>
+      </div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // packet stops: the right end of each module, the top edge of each socket
+      const P = {
+        cli: [460, 265],
+        session: [410, 545],
+        health: [830, 545],
+        issues: [1160, 545],
+        apply: [1660, 545],
+        msSession: [410, 660],
+        msIssues: [1000, 660],
+        msApply: [1080, 660],
+        store: [1370, 660],
+        notify: [1680, 660],
+      };
+      const COLORS = {
+        cli: ["#6e56cf", "#efeafd"],
+        mod: ["#0b7a75", "#dff3f1"],
+        sock: ["#b35c00", "#fff1e5"],
+      };
+      const KIND = { cli: "cli", session: "mod", health: "mod", issues: "mod", apply: "mod", meroshare: "sock", store: "sock", notify: "sock" };
+
+      function on(id, at) {
+        const [border, fill] = COLORS[KIND[id]];
+        tl.to("#" + id, { borderColor: border, backgroundColor: fill, duration: 0.25, ease: "power2.out" }, at);
+      }
+      function off(id, at, done = true) {
+        tl.to("#" + id, { backgroundColor: "#ffffff", duration: 0.3, ease: "power2.inOut" }, at);
+        if (done) tl.to("#" + id + " .tick", { opacity: 1, duration: 0.2 }, at);
+      }
+      function move(to, at, d = 0.5) {
+        tl.to("#packet", { x: P[to][0], y: P[to][1], duration: d, ease: "power2.inOut" }, at);
+      }
+      function caption(n, at, until) {
+        tl.fromTo("#cap" + n, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, at);
+        tl.to("#cap" + n, { opacity: 0, duration: 0.2 }, until - 0.2);
+      }
+
+      // start state (outside the timeline, so frame 0 is already right)
+      gsap.set("#packet", { x: P.cli[0], y: P.cli[1], opacity: 0 });
+      gsap.set(".box", { borderColor: "#c9d1d9", backgroundColor: "#ffffff" });
+      gsap.set(".tick", { opacity: 0 });
+
+      const T = 2; // seconds per step
+      // 1. the command
+      caption(0, 0.1, T);
+      on("cli", 0.2);
+      tl.to("#packet", { opacity: 1, duration: 0.2 }, 0.5);
+
+      // 2. session: logs in through meroshare
+      caption(1, T, 2 * T);
+      tl.to("#cli", { backgroundColor: "#ffffff", duration: 0.3 }, T);
+      move("session", T);
+      on("session", T + 0.4);
+      move("msSession", T + 0.7, 0.4);
+      on("meroshare", T + 1.0);
+      move("session", T + 1.3, 0.4);
+      off("meroshare", T + 1.5, false);
+
+      // 3. health
+      caption(2, 2 * T, 3 * T);
+      off("session", 2 * T);
+      move("health", 2 * T);
+      on("health", 2 * T + 0.4);
+
+      // 4. issues: reads through meroshare
+      caption(3, 3 * T, 4 * T);
+      off("health", 3 * T);
+      move("issues", 3 * T);
+      on("issues", 3 * T + 0.4);
+      move("msIssues", 3 * T + 0.7, 0.4);
+      on("meroshare", 3 * T + 1.0);
+      move("issues", 3 * T + 1.3, 0.4);
+      off("meroshare", 3 * T + 1.5, false);
+
+      // 5. apply: one write through meroshare
+      caption(4, 4 * T, 5 * T);
+      off("issues", 4 * T);
+      move("apply", 4 * T);
+      on("apply", 4 * T + 0.4);
+      move("msApply", 4 * T + 0.7, 0.45);
+      on("meroshare", 4 * T + 1.0);
+      tl.to("#packet", { scale: 1.5, duration: 0.15, yoyo: true, repeat: 1 }, 4 * T + 1.05);
+      move("apply", 4 * T + 1.35, 0.4);
+      off("meroshare", 4 * T + 1.5);
+
+      // 6. store
+      caption(5, 5 * T, 6 * T);
+      off("apply", 5 * T);
+      move("store", 5 * T, 0.55);
+      on("store", 5 * T + 0.4);
+
+      // 7. notify
+      caption(6, 6 * T, 7 * T);
+      off("store", 6 * T);
+      move("notify", 6 * T, 0.45);
+      on("notify", 6 * T + 0.4);
+      off("notify", 7 * T - 0.4);
+      tl.to("#packet", { opacity: 0, duration: 0.3 }, 7 * T - 0.4);
+
+      // clear the ticks so the loop starts clean
+      tl.to(".tick", { opacity: 0, duration: 0.4 }, 7 * T + 0.2);
+      tl.to(".box", { borderColor: "#c9d1d9", duration: 0.4 }, 7 * T + 0.2);
+      tl.set({}, {}, 15);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+      // open with #play in the address to watch it loop in a browser
+      if (location.hash === "#play") tl.play().eventCallback("onComplete", () => tl.restart());
+    </script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+# platform/scheduler
+
+Owns node-cron. `schedule(expr, job)` runs `job` on the cron schedule and skips a tick while the run before is still going. `getAutoStartInstructions()` prints how to run `auto run` once a day from the OS timer (full path, never npx; the master password from `IPO_MASTER_PASSWORD`) on Linux, macOS and Windows. The daily job itself (its steps) belongs to `modules/automation`.
+
+`writePid` / `clearPid` keep `auto.pid` in the ipo home while `ipo auto start` runs, so `runningPid` (for `ipo auto status`) and `stopRunning` (for `ipo auto stop`, which sends SIGTERM) work from another process.
+
+`auto.pid` holds JSON: the pid and a start marker, the process's command line (`/proc/<pid>/cmdline` on Linux, `ps -ww -o command= -p` on macOS). A pid counts as running only when the process is alive and its command line still matches, so a pid the OS gave to another program is never signalled. A process of another user (EPERM) and an old file with the bare pid count as stale. Windows cannot read the command line: the pid is checked for life only, and `stopRunning` returns a note that says so.
+
+`acquireRunLock(home, name)` is a lock across processes for a long job, in `<home>/<name>.run.lock` (pid, start marker, random token). It is linked into place whole, released only by its token and on a normal exit. A lock whose process is gone or whose command line no longer matches is stale and taken over with an atomic rename. While another live process holds it, it throws `RunBusyError`. A kill by signal leaves the file; the next run reads it as stale.
