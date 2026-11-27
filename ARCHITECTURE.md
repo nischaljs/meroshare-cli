@@ -15,12 +15,12 @@
 | 7 | Modules do no I/O | A module imports no `fs`, `crypto`, `http(s)`, `net`, `child_process`, `nodemailer`, `node-cron` or fetch library, and calls no global `fetch`. | `7-modules-no-io`, `7-modules-no-io-builtins`, `test/no-fetch-in-modules.test.ts` (dependency-cruiser cannot see a global `fetch`) |
 | 8 | Tests stay out of source | Source never imports a `.test.ts` file or `test/`. A `.test.ts` file may import the fake server. | `8-tests-stay-out-of-source` |
 
-Run them with `npm run lint:deps`. `npm run check` runs the type check, these rules and the tests.
+Run them with `npm run lint:deps`. `npm run check` runs the type check, these rules, the tests and `npm run test:pack` (pack the package, install it in a temp folder, run the installed `ipo --help`).
 
 ## Layers
 
 ```
-bin/cli.ts            starts the CLI
+bin/cli.ts            starts the CLI (built to dist/bin/cli.js, the installed `ipo` and `meroshare-cli`)
 src/cli/              the command list and the commander wiring (registry)
 src/modules/<name>/   product logic: one folder per job, each with public.ts, README.md, tests
 src/platform/<name>/  sockets: store, meroshare, notify, scheduler, terminal, context, command

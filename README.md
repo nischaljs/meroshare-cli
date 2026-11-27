@@ -1,10 +1,12 @@
-<!-- Images: https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/<file> (absolute, so they also show on npm) -->
+<!-- Images: https://raw.githubusercontent.com/nischaljs/meroshare-cli/HEAD/docs/media/<file> (absolute, so they also show on npm) -->
 
 # meroshare-cli
 
 Apply for an IPO on MeroShare for every account in your family, with one command: `ipo`. Everything stays on your own computer. Your passwords go to MeroShare and nowhere else.
 
-![The ipo command in a terminal: ipo doctor finds one account blocked by an expired password and one whose DEMAT expires in 9 days, ipo fix changes the expired password after a typed yes, and ipo apply applies from all three accounts.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/demo.gif)
+This is not made by, or affiliated with, CDSC or MeroShare.
+
+![The ipo command in a terminal: ipo doctor finds one account blocked by an expired password and one whose DEMAT expires in 9 days, ipo fix changes the expired password after a typed yes, and ipo apply applies from all three accounts.](https://raw.githubusercontent.com/nischaljs/meroshare-cli/HEAD/docs/media/demo.gif)
 
 [![npm version](https://img.shields.io/npm/v/meroshare-cli)](https://www.npmjs.com/package/meroshare-cli)
 [![license: MIT](https://img.shields.io/npm/l/meroshare-cli)](#license)
@@ -34,7 +36,7 @@ Many of us look after MeroShare for the whole family: our own account, a parent'
 
 ## Install
 
-You need [Node.js](https://nodejs.org/) 18 or newer.
+You need [Node.js](https://nodejs.org/) 20.5 or newer (18.17 or newer on Node 18).
 
 ```bash
 npm install -g meroshare-cli
@@ -121,9 +123,9 @@ ipo apply    # खुला IPO सबै खाताबाट भर्ने
 
 ## For developers
 
-![How ipo is built: the cli on top, the modules in the middle, and the platform sockets store, meroshare, notify, scheduler and terminal at the bottom. Imports only go down.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/architecture.svg)
+![How ipo is built: the cli on top, the modules in the middle, and the platform sockets store, meroshare, notify, scheduler and terminal at the bottom. Imports only go down.](https://raw.githubusercontent.com/nischaljs/meroshare-cli/HEAD/docs/media/architecture.svg)
 
-![One ipo apply, step by step: the command, then session, health, issues and apply, each calling MeroShare through the meroshare socket, then store and notify.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/flow.gif)
+![One ipo apply, step by step: the command, then session, health, issues and apply, each calling MeroShare through the meroshare socket, then store and notify.](https://raw.githubusercontent.com/nischaljs/meroshare-cli/HEAD/docs/media/flow.gif)
 
 - **Sockets** (`src/platform/*`) are the only code that touches the outside world: the config file, MeroShare, email, cron and the terminal.
 - **Modules** (`src/modules/*`) hold the product logic. Each one plugs into the sockets and talks to another module only through its `public.ts`.
@@ -134,13 +136,22 @@ The full picture, with the rules and the data flow: [ARCHITECTURE.md](ARCHITECTU
 ```bash
 npm install
 npm test          # the tests, on a fake MeroShare server (never the real one)
-npm run check     # type check, dependency rules and tests
+npm run check     # type check, dependency rules, tests and the pack smoke test
+npm run test:pack # pack the package, install it in a temp folder, run ipo --help
 ```
 
 To contribute, open an issue or a pull request. Keep a change inside one module where you can, add a test next to it, and run `npm run check` before you push.
 
 The pictures here can be made again: `scripts/demo/record.sh` records the terminal GIF on the fake server (needs [vhs](https://github.com/charmbracelet/vhs)), and `docs/media/src/render-flow.sh` renders the flow animation from `docs/media/src/flow.html`.
 
+## Releasing
+
+Only GitHub Actions publishes (`.github/workflows/publish.yml`, npm trusted publishing, no token).
+
+1. Set `version` in `package.json` and in `src/cli/registry.ts` (`ipo --version`; `npm run test:pack` fails when they differ), and add `## <version> (<date>)` to `CHANGELOG.md`.
+2. Commit, then `git tag v<version> && git push origin v<version>`.
+3. The workflow checks the tag matches the version, runs the checks, publishes (a version with `-` goes to the npm tag `next`, any other to `latest`) and creates the GitHub release from the CHANGELOG section.
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
