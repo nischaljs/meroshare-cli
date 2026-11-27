@@ -12,7 +12,14 @@
     "start": "node dist/bin/cli.js",
     "ipo": "tsx bin/cli.ts"
   },
-  "keywords": ["nepse", "ipo", "meroshare", "cdsc", "nepal", "stock"],
+  "keywords": [
+    "nepse",
+    "ipo",
+    "meroshare",
+    "cdsc",
+    "nepal",
+    "stock"
+  ],
   "license": "MIT",
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
@@ -22,12 +29,14 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.16",
     "ora": "^8.1.1",
-    "p-limit": "^6.1.0"
+    "p-limit": "^6.1.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-"@types/node": "^22.10.0",
+    "@types/node": "^22.10.0",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.17",
+    "dependency-cruiser": "^17.4.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
