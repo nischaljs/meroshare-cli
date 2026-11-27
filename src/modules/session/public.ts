@@ -1,6 +1,9 @@
 export {
   openSession,
+  loginWithPassword,
   openSessions,
+  createSessionPool,
+  type SessionPool,
   closeSession,
   requireUsable,
   isInvalidCredentials,

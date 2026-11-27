@@ -23,7 +23,8 @@ Fields: `name`, `method`, `path` (string or a function of the input), `kind` (`r
 
 - Headers: a browser User-Agent, `Origin` and `Referer` `https://meroshare.cdsc.com.np/`, and the token in `Authorization` as is (no `Bearer`).
 - Login: `client.login(def, input)` returns the parsed body and the token from the `Authorization` response header.
-- Retries: reads only. 3 attempts; the waits are 2 s and 4 s, each plus 250 to 750 ms of jitter. A read is retried on 429, 5xx, a network error or an HTML page (bot check). A write is never retried.
+- Timeout: each request (body included) is given up after `timeoutMs` (`ClientOptions`, default 30 s) with a `timeout` error. A read retries it like a network error; a write is never retried and its outcome is unknown (it may have reached MeroShare), so callers treat it as "no clear answer".
+- Retries: reads only. 3 attempts; the waits are 2 s and 4 s, each plus 250 to 750 ms of jitter. A read is retried on 429, 5xx, a network error, a timeout or an HTML page (bot check). A write is never retried.
 - HTML challenge: `content-type: text/html`, or a body that starts with `<!doctype` or `<html`.
 - Errors: every failure is a `MeroShareError` with `endpoint`, `status`, `kind` (`http`, `challenge`, `network`, `schema`, `auth`) and `errorCode`. A body that does not match the schema is a `ResponseShapeError` that names the endpoint.
 - `friendlyMessage(err)` turns an error into one sentence; a 401 "Role Not Authorized" points to `ipo doctor`.

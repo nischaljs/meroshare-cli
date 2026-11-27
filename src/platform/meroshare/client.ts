@@ -11,12 +11,15 @@ export const BROWSER_UA =
 const ATTEMPTS = 3;
 const BACKOFF_MS = [2000, 4000];
 const JITTER_MS: [number, number] = [250, 750];
+export const DEFAULT_TIMEOUT_MS = 30_000;
 
 export interface ClientOptions {
   apiBase?: string;
   resultBase?: string;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  /** How long one request may take, body included, before it is given up (default 30 s). */
+  timeoutMs?: number;
   /** Called before each retry of a read. */
   onRetry?: (info: { endpoint: string; attempt: number; waitMs: number; reason: string }) => void;
 }
@@ -57,7 +60,7 @@ function errorFromBody(endpoint: string, status: number, text: string): MeroShar
 
 function retryable(err: unknown): boolean {
   if (!(err instanceof MeroShareError)) return false;
-  if (err.kind === 'challenge' || err.kind === 'network') return true;
+  if (err.kind === 'challenge' || err.kind === 'network' || err.kind === 'timeout') return true;
   return err.kind === 'http' && (err.status === 429 || err.status >= 500);
 }
 
@@ -66,11 +69,13 @@ export function createMeroShareClient(opts: ClientOptions = {}): MeroShareClient
   const resultBase = (opts.resultBase ?? process.env.IPORESULT_BASE ?? DEFAULT_RESULT_BASE).replace(/\/$/, '');
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const random = opts.random ?? Math.random;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   let resultCookies = '';
 
   async function refreshResultCookies(): Promise<void> {
     const res = await fetch(`${resultBase}/`, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+      signal: AbortSignal.timeout(timeoutMs),
     });
     resultCookies = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
     await res.text();
@@ -104,16 +109,21 @@ export function createMeroShareClient(opts: ClientOptions = {}): MeroShareClient
     }
 
     let res: Response;
+    let text: string;
     try {
       res = await fetch(`${base}${path}`, {
         method: ep.method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
       });
+      text = await res.text();
     } catch (err) {
+      if ((err as Error).name === 'TimeoutError') {
+        throw new MeroShareError(`MeroShare did not answer within ${Math.round(timeoutMs / 1000)} s`, ep.name, 0, 'timeout');
+      }
       throw new MeroShareError(`Network error: ${(err as Error).message}`, ep.name, 0, 'network');
     }
-    const text = await res.text();
     if (site === 'result') {
       const extra = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]);
       if (extra.length) resultCookies = [resultCookies, ...extra].filter(Boolean).join('; ');

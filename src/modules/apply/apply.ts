@@ -1,10 +1,11 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public.js';
+import { acquireRunLock, RunBusyError, type RunLock } from '../../platform/scheduler/public.js';
 import { pacedMap } from '../../platform/terminal/public.js';
 import { getBankDetail, getBanks, listAccounts, type Account } from '../accounts/public.js';
 import { checkSession, recordHealth, type HealthReport, loginFailedReport } from '../health/public.js';
 import { hasActed, listIssues, matchesCategories, type Issue } from '../issues/public.js';
-import { closeSession, openSessions, type Session } from '../session/public.js';
+import { createSessionPool, type Session, type SessionPool } from '../session/public.js';
 import { ApplyEndpoint } from './endpoints.js';
 
 export type ApplyStatus = 'applied' | 'already' | 'skipped' | 'failed';
@@ -28,14 +29,23 @@ export interface ApplyPlan {
   issues: Issue[];
   /** The health checks made while opening the sessions (saved to the cache). */
   reports: HealthReport[];
+  /** Logs out the sessions, when the plan opened them (no pool was given). */
+  release(): Promise<void>;
 }
 
 /**
  * Opens a session per account (paced). A blocked account or a failed login is left
  * out with the reason. The issue list comes from the first healthy account.
+ * With a pool (the daily job) the logins come from it and stay open in it.
+ * Only MeroShare blocks an account here (a login flag, a refusal, no bank); a date we
+ * computed only warns.
  */
-export async function planApply(ctx: AppContext, accounts: Account[] = listAccounts(ctx)): Promise<ApplyPlan> {
-  const outcomes = await openSessions(ctx, accounts);
+export async function planApply(ctx: AppContext, accounts: Account[] = listAccounts(ctx), pool?: SessionPool): Promise<ApplyPlan> {
+  const own = pool ?? createSessionPool(ctx);
+  const release = async () => {
+    if (!pool) await own.closeAll();
+  };
+  const outcomes = await own.getMany(accounts);
   const sessions: Session[] = [];
   const skipped: Skip[] = [];
   const reports: HealthReport[] = [];
@@ -53,7 +63,6 @@ export async function planApply(ctx: AppContext, accounts: Account[] = listAccou
         ? o.session.blocked.map((x) => x.message)
         : report.findings.filter((f) => f.severity === 'blocked').map((f) => f.message);
       skipped.push({ account: o.account, reason: `${why.join('; ')}${report.fix ? ` (fix: ${report.fix})` : ''}` });
-      await closeSession(ctx, o.session);
       continue;
     }
     sessions.push(o.session);
@@ -64,15 +73,11 @@ export async function planApply(ctx: AppContext, accounts: Account[] = listAccou
     try {
       issues = await listIssues(ctx, sessions[0]);
     } catch (err) {
-      await closeAll(ctx, sessions);
+      await release();
       throw new Error(`Could not read the open issues: ${friendlyMessage(err)}`);
     }
   }
-  return { sessions, skipped, issues, reports };
-}
-
-export async function closeAll(ctx: AppContext, sessions: Session[]): Promise<void> {
-  for (const s of sessions) await closeSession(ctx, s);
+  return { sessions, skipped, issues, reports, release };
 }
 
 function alreadyApplied(err: unknown): boolean {
@@ -151,7 +156,7 @@ export async function runApply(ctx: AppContext, plan: ApplyPlan, selections: Sel
     });
     results.push(...perAccount.flat());
   } finally {
-    await closeAll(ctx, plan.sessions);
+    await plan.release();
   }
   const applied = results.filter((r) => r.status === 'applied');
   if (applied.length) {
@@ -184,18 +189,47 @@ export function autoKitta(issue: Issue, maxKitta: number): number | null {
   return kitta;
 }
 
+export class ApplyBusyError extends Error {
+  constructor(readonly pid: number) {
+    super('Another ipo apply is running');
+    this.name = 'ApplyBusyError';
+  }
+}
+
+/**
+ * One apply run at a time across processes (the apply command, auto run, the scheduler).
+ * Held from login to the last result. Throws `ApplyBusyError` while another run holds it.
+ */
+export function lockApply(ctx: AppContext): RunLock {
+  try {
+    return acquireRunLock(ctx.store.home, 'apply');
+  } catch (err) {
+    if (err instanceof RunBusyError) throw new ApplyBusyError(err.pid);
+    throw err;
+  }
+}
+
 /** Applies, with no prompts, for every open issue in the categories. */
-export async function autoApply(ctx: AppContext, opts: AutoApplyOptions): Promise<{ plan: ApplyPlan; results: ApplyResult[] }> {
-  const plan = await planApply(ctx);
-  const selections: Selection[] = [];
-  for (const issue of plan.issues) {
-    if (!matchesCategories(issue, opts.categories)) continue;
-    const kitta = autoKitta(issue, opts.maxKitta);
-    if (kitta !== null) selections.push({ issue, kitta });
+export async function autoApply(
+  ctx: AppContext,
+  opts: AutoApplyOptions,
+  pool?: SessionPool,
+): Promise<{ plan: ApplyPlan; results: ApplyResult[] }> {
+  const lock = lockApply(ctx);
+  try {
+    const plan = await planApply(ctx, listAccounts(ctx), pool);
+    const selections: Selection[] = [];
+    for (const issue of plan.issues) {
+      if (!matchesCategories(issue, opts.categories)) continue;
+      const kitta = autoKitta(issue, opts.maxKitta);
+      if (kitta !== null) selections.push({ issue, kitta });
+    }
+    if (!selections.length) {
+      await plan.release();
+      return { plan, results: [] };
+    }
+    return { plan, results: await runApply(ctx, plan, selections) };
+  } finally {
+    lock.release();
   }
-  if (!selections.length) {
-    await closeAll(ctx, plan.sessions);
-    return { plan, results: [] };
-  }
-  return { plan, results: await runApply(ctx, plan, selections) };
 }

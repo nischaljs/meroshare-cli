@@ -44,15 +44,40 @@ export function paymentHtml(form: PaymentForm): string {
 `;
 }
 
+/** How long the payment page stays on disk: long enough for the browser to load it. */
+export const PAYMENT_PAGE_TTL_MS = 60_000;
+
+const pending = new Set<string>();
+let exitHook = false;
+
+function removeDir(dir: string): void {
+  pending.delete(dir);
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // best effort
+  }
+}
+
 /**
  * Writes an auto-submit form to a private temp file and opens it in the browser.
- * The person types wallet details on the partner's page, never here.
+ * The person types wallet details on the partner's page, never here. The folder is
+ * removed after `ttlMs` (an unref'd timer, so it never keeps ipo running) and when
+ * the process exits, whichever comes first.
  */
-export function openPaymentPage(form: PaymentForm, opts: { open?: boolean } = {}): string {
+export function openPaymentPage(form: PaymentForm, opts: { open?: boolean; ttlMs?: number } = {}): string {
   const html = paymentHtml(form);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipo-pay-'));
   const file = path.join(dir, `pay-${crypto.randomBytes(4).toString('hex')}.html`);
   fs.writeFileSync(file, html, { mode: 0o600 });
+  pending.add(dir);
+  setTimeout(() => removeDir(dir), opts.ttlMs ?? PAYMENT_PAGE_TTL_MS).unref();
+  if (!exitHook) {
+    exitHook = true;
+    process.once('exit', () => {
+      for (const d of [...pending]) removeDir(d);
+    });
+  }
   if (opts.open !== false) openInBrowser(file);
   return file;
 }

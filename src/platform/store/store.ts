@@ -91,6 +91,11 @@ export class Store {
     return this.file.filePath;
   }
 
+  /** The folder that holds config.json (and the other files ipo keeps). */
+  get home(): string {
+    return path.dirname(this.file.filePath);
+  }
+
   exists(): boolean {
     return this.file.exists();
   }

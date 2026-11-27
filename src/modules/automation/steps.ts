@@ -1,10 +1,10 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { log, pacedMap } from '../../platform/terminal/public.js';
-import { autoApply } from '../apply/public.js';
+import { ApplyBusyError, autoApply } from '../apply/public.js';
 import { runDoctor, type HealthReport } from '../health/public.js';
 import { rotatePassword, rotationReason } from '../password/public.js';
 import { sendRenewalReminders } from '../renewal/public.js';
-import { closeSession, openSession } from '../session/public.js';
+import { createSessionPool, type SessionPool } from '../session/public.js';
 import type { AutoSettings } from './state.js';
 
 /** What the steps of one run share. */
@@ -12,6 +12,8 @@ export interface RunBag {
   settings: AutoSettings;
   reports: HealthReport[];
   lines: string[];
+  /** Each account logs in once per run, in the first step that needs it; later steps reuse it. */
+  sessions: SessionPool;
 }
 
 /** A step plugs into the daily job with this. Steps run by `order`, low first. */
@@ -25,7 +27,7 @@ export const healthStep: AutomationStep = {
   name: 'health',
   order: 10,
   async run(ctx, bag) {
-    bag.reports = await runDoctor(ctx);
+    bag.reports = await runDoctor(ctx, bag.sessions);
     const bad = bag.reports.filter((r) => r.status !== 'ok');
     bag.lines.push(`health: ${bag.reports.length} account(s) checked, ${bad.length} need attention`);
   },
@@ -40,20 +42,19 @@ export const passwordStep: AutomationStep = {
       .map((r) => ({ report: r, reason: rotationReason(r, ctx.now()) }))
       .filter((d): d is { report: HealthReport; reason: string } => d.reason !== null);
     await pacedMap(due, { concurrency: 1, gapMs: ctx.accountGapMs, sleep: ctx.sleep }, async ({ report, reason }) => {
-      let session;
-      try {
-        session = await openSession(ctx, report.account);
-      } catch (err) {
-        bag.lines.push(`password: ${report.account.name}: could not log in (${(err as Error).message})`);
+      const o = await bag.sessions.get(report.account);
+      if (!o.ok) {
+        bag.lines.push(`password: ${report.account.name}: could not log in (${o.error})`);
         return;
       }
       try {
-        const out = await rotatePassword(ctx, session);
+        const out = await rotatePassword(ctx, o.session);
+        if ((out.status === 'changed' || out.status === 'rejected') && out.session) await bag.sessions.replace(out.session);
+        // neither password logs in: no more tries with this account in this run
+        if (out.status === 'blocked') await bag.sessions.fail(report.account, out.message);
         bag.lines.push(`password: ${report.account.name} (${reason}): ${out.status}${out.status === 'changed' ? '' : `, ${out.message}`}`);
       } catch (err) {
         bag.lines.push(`password: ${report.account.name}: ${(err as Error).message}`);
-      } finally {
-        if (session) await closeSession(ctx, session);
       }
     });
   },
@@ -72,7 +73,20 @@ export const applyStep: AutomationStep = {
   name: 'apply',
   order: 40,
   async run(ctx, bag) {
-    const { plan, results } = await autoApply(ctx, { categories: bag.settings.categories, maxKitta: bag.settings.maxKitta });
+    // checked here, not by the commands, so auto run, auto start and every cron run obey it
+    if (!bag.settings.enabled) {
+      bag.lines.push('apply: Auto-apply is off. Turn it on with ipo auto config.');
+      return;
+    }
+    let outcome;
+    try {
+      outcome = await autoApply(ctx, { categories: bag.settings.categories, maxKitta: bag.settings.maxKitta }, bag.sessions);
+    } catch (err) {
+      if (!(err instanceof ApplyBusyError)) throw err;
+      bag.lines.push(`apply: Another ipo apply is running (pid ${err.pid}). This run did not apply.`);
+      return;
+    }
+    const { plan, results } = outcome;
     for (const s of plan.skipped) bag.lines.push(`apply: skipped ${s.account.name}: ${s.reason}`);
     if (!results.length) bag.lines.push('apply: nothing to apply for');
     for (const r of results) bag.lines.push(`apply: ${r.account.name} ${r.company}: ${r.status} ${r.message}`);
@@ -84,13 +98,17 @@ export const DAILY_STEPS: AutomationStep[] = [healthStep, passwordStep, renewalW
 
 /** Runs the steps in order. A failing step is logged and the next one still runs. */
 export async function runDaily(ctx: AppContext, settings: AutoSettings, steps: AutomationStep[] = DAILY_STEPS): Promise<RunBag> {
-  const bag: RunBag = { settings, reports: [], lines: [] };
-  for (const step of [...steps].sort((a, b) => a.order - b.order)) {
-    try {
-      await step.run(ctx, bag);
-    } catch (err) {
-      bag.lines.push(`${step.name}: failed: ${(err as Error).message}`);
+  const bag: RunBag = { settings, reports: [], lines: [], sessions: createSessionPool(ctx) };
+  try {
+    for (const step of [...steps].sort((a, b) => a.order - b.order)) {
+      try {
+        await step.run(ctx, bag);
+      } catch (err) {
+        bag.lines.push(`${step.name}: failed: ${(err as Error).message}`);
+      }
     }
+  } finally {
+    await bag.sessions.closeAll();
   }
   for (const l of bag.lines) log.info(`[auto] ${l}`);
   return bag;

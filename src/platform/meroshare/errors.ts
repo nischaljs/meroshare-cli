@@ -1,4 +1,5 @@
-export type MeroShareErrorKind = 'http' | 'challenge' | 'network' | 'schema' | 'auth';
+/** `timeout`: no answer in time; for a write the outcome is unknown (it may have reached MeroShare). */
+export type MeroShareErrorKind = 'http' | 'challenge' | 'network' | 'timeout' | 'schema' | 'auth';
 
 /** Every failure of a call through the MeroShare socket. */
 export class MeroShareError extends Error {
@@ -40,6 +41,7 @@ export function friendlyMessage(err: unknown): string {
     }
     if (err.kind === 'challenge') return 'MeroShare answered with a web page (a bot check) instead of data. Try again later.';
     if (err.kind === 'network') return `Could not reach MeroShare: ${err.message}`;
+    if (err.kind === 'timeout') return `${err.message}. It may or may not have gone through.`;
     return err.message;
   }
   return err instanceof Error ? err.message : String(err);

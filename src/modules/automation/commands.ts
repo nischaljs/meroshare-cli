@@ -117,8 +117,10 @@ const stop = defineCommand({
   name: 'stop',
   description: 'Stop the running scheduler',
   async handler() {
-    if (stopRunning()) log.success('Scheduler stopped.');
-    else log.info('No scheduler is running.');
+    const out = stopRunning();
+    if (!out.stopped) return log.info('No scheduler is running.');
+    log.success('Scheduler stopped.');
+    if (out.note) log.warn(out.note);
   },
 });
 
