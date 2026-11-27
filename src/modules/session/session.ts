@@ -1,7 +1,7 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public.js';
 import { pacedMap } from '../../platform/terminal/public.js';
-import { accountId, promotePendingPassword, type Account } from '../accounts/public.js';
+import { accountId, clearPendingPassword, promotePendingPassword, type Account } from '../accounts/public.js';
 import { blockingReasons, parseFlags, type BlockReason, type LoginFlags } from './flags.js';
 import { Login, Logout } from './endpoints.js';
 
@@ -54,6 +54,8 @@ export async function openSession(ctx: AppContext, account: Account): Promise<Se
   let recoveredPending = false;
   try {
     res = await loginWith(ctx, account, account.password);
+    // the stored password still works, so a pending one never took effect
+    if (account.pendingPassword) current = clearPendingPassword(ctx, accountId(account));
   } catch (err) {
     if (!(isInvalidCredentials(err) && account.pendingPassword)) throw new LoginError(account, err);
     try {
