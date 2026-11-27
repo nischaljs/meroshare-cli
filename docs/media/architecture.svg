@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="t">How ipo is built</title>
+  <desc id="d">The cli on top imports modules through their public.ts. Modules hold the product logic and import each other only through public.ts. Each module plugs into platform sockets at the bottom: store, meroshare, notify, scheduler and terminal. Only the sockets talk to the outside world. Imports only go down, never up.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <marker id="arrow-cli" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6e56cf"/>
+    </marker>
+    <g id="plug">
+      <!-- cable, plug body, two prongs -->
+      <line x1="0" y1="-10" x2="0" y2="12" stroke="#0b7a75" stroke-width="3"/>
+      <rect x="-14" y="12" width="28" height="16" rx="3" fill="#0b7a75"/>
+      <rect x="-9" y="28" width="5" height="10" rx="1" fill="#0b7a75"/>
+      <rect x="4" y="28" width="5" height="10" rx="1" fill="#0b7a75"/>
+    </g>
+    <g id="slot">
+      <rect x="-9" y="0" width="5" height="9" rx="1" fill="#7a3e00"/>
+      <rect x="4" y="0" width="5" height="9" rx="1" fill="#7a3e00"/>
+    </g>
+  </defs>
+
+  <style>
+    .h { font-size: 15px; font-weight: 700; fill: #1f2328; }
+    .s { font-size: 12px; fill: #424a53; }
+    .m { font-size: 11.5px; fill: #57606a; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .mod rect { fill: #ffffff; stroke: #0b7a75; stroke-width: 1.5; }
+    .sock > rect { fill: #fff1e5; stroke: #b35c00; stroke-width: 1.5; }
+    .out rect { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1; }
+  </style>
+
+  <!-- light panel so it reads the same on light and dark GitHub themes -->
+  <rect x="2" y="2" width="956" height="656" rx="18" fill="#ffffff" stroke="#d0d7de" stroke-width="2"/>
+
+  <text x="32" y="40" style="font-size:20px;font-weight:700;fill:#1f2328">How ipo is built</text>
+  <text x="32" y="62" class="s">Arrows show the only directions code may import. Everything points down.</text>
+
+  <!-- cli -->
+  <rect x="330" y="82" width="300" height="58" rx="10" fill="#efeafd" stroke="#6e56cf" stroke-width="1.5"/>
+  <text x="480" y="106" text-anchor="middle" class="h">cli</text>
+  <text x="480" y="126" text-anchor="middle" class="m code">bin/cli.ts · src/cli/commands.ts</text>
+
+  <!-- cli -> modules -->
+  <line x1="480" y1="140" x2="480" y2="174" stroke="#6e56cf" stroke-width="2" marker-end="url(#arrow-cli)"/>
+  <text x="492" y="162" class="m">only a module's <tspan class="code">public.ts</tspan></text>
+
+  <!-- cli -> platform (left lane) -->
+  <path d="M330 111 H52 V492 H76" fill="none" stroke="#6e56cf" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-cli)"/>
+  <text transform="translate(42 300) rotate(-90)" text-anchor="middle" class="m">cli may use a socket's public.ts</text>
+
+  <!-- modules group -->
+  <rect x="76" y="178" width="854" height="226" rx="14" fill="#e6f4f3" stroke="#0b7a75" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="96" y="202" class="h" style="fill:#0b5f5b">modules <tspan class="s" style="font-weight:400">(plugs): product logic, no files, no network</tspan></text>
+
+  <!-- row 1: modules with a command -->
+  <g class="mod">
+    <rect x="96" y="214" width="124" height="50" rx="8"/>
+    <rect x="232" y="214" width="124" height="50" rx="8"/>
+    <rect x="368" y="214" width="124" height="50" rx="8"/>
+    <rect x="504" y="214" width="124" height="50" rx="8"/>
+    <rect x="640" y="214" width="124" height="50" rx="8"/>
+    <rect x="776" y="214" width="134" height="50" rx="8"/>
+  </g>
+  <g text-anchor="middle">
+    <text x="158" y="236" class="h">setup</text><text x="158" y="254" class="m code">ipo init</text>
+    <text x="294" y="236" class="h">apply</text><text x="294" y="254" class="m code">ipo apply</text>
+    <text x="430" y="236" class="h">results</text><text x="430" y="254" class="m code">ipo result</text>
+    <text x="566" y="236" class="h">fix</text><text x="566" y="254" class="m code">ipo fix</text>
+    <text x="702" y="236" class="h">automation</text><text x="702" y="254" class="m code">ipo auto</text>
+    <text x="843" y="236" class="h">notifications</text><text x="843" y="254" class="m code">ipo notify</text>
+  </g>
+
+  <!-- row 1 -> row 2 -->
+  <line x1="294" y1="266" x2="294" y2="304" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="566" y1="266" x2="566" y2="304" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="702" y1="266" x2="702" y2="304" stroke="#57606a" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="306" y="290" class="m">another module only through its <tspan class="code">public.ts</tspan></text>
+
+  <!-- row 2: shared modules -->
+  <g class="mod">
+    <rect x="96" y="308" width="124" height="50" rx="8"/>
+    <rect x="232" y="308" width="124" height="50" rx="8"/>
+    <rect x="368" y="308" width="124" height="50" rx="8"/>
+    <rect x="504" y="308" width="124" height="50" rx="8"/>
+    <rect x="640" y="308" width="124" height="50" rx="8"/>
+    <rect x="776" y="308" width="134" height="50" rx="8"/>
+  </g>
+  <g text-anchor="middle">
+    <text x="158" y="330" class="h">accounts</text><text x="158" y="348" class="m">your family's logins</text>
+    <text x="294" y="330" class="h">session</text><text x="294" y="348" class="m">login, blocking flags</text>
+    <text x="430" y="330" class="h">health</text><text x="430" y="348" class="m code">ipo doctor</text>
+    <text x="566" y="330" class="h">issues</text><text x="566" y="348" class="m">open IPOs</text>
+    <text x="702" y="330" class="h">password</text><text x="702" y="348" class="m">two-phase change</text>
+    <text x="843" y="330" class="h">renewal</text><text x="843" y="348" class="m">charges, payment page</text>
+  </g>
+  <text x="96" y="390" class="m">Each module: <tspan class="code">public.ts</tspan>, <tspan class="code">README.md</tspan>, tests. Endpoints with <tspan class="code">defineEndpoint</tspan>, stored data with <tspan class="code">defineSection</tspan>.</text>
+
+  <!-- plugs into sockets -->
+  <use href="#plug" x="150" y="414"/>
+  <use href="#plug" x="330" y="414"/>
+  <use href="#plug" x="510" y="414"/>
+  <use href="#plug" x="690" y="414"/>
+  <use href="#plug" x="870" y="414"/>
+
+  <!-- sockets -->
+  <g class="sock">
+    <rect x="80" y="452" width="140" height="80" rx="10"/>
+    <rect x="260" y="452" width="140" height="80" rx="10"/>
+    <rect x="440" y="452" width="140" height="80" rx="10"/>
+    <rect x="620" y="452" width="140" height="80" rx="10"/>
+    <rect x="800" y="452" width="140" height="80" rx="10"/>
+  </g>
+  <use href="#slot" x="150" y="452"/>
+  <use href="#slot" x="330" y="452"/>
+  <use href="#slot" x="510" y="452"/>
+  <use href="#slot" x="690" y="452"/>
+  <use href="#slot" x="870" y="452"/>
+  <g text-anchor="middle">
+    <text x="150" y="484" class="h" style="fill:#7a3e00">store</text>
+    <text x="150" y="502" class="m">encrypted config,</text><text x="150" y="517" class="m">lock, atomic write</text>
+    <text x="330" y="484" class="h" style="fill:#7a3e00">meroshare</text>
+    <text x="330" y="502" class="m">reads retry,</text><text x="330" y="517" class="m">writes never retry</text>
+    <text x="510" y="484" class="h" style="fill:#7a3e00">notify</text>
+    <text x="510" y="502" class="m">prints each notice,</text><text x="510" y="517" class="m">emails it if on</text>
+    <text x="690" y="484" class="h" style="fill:#7a3e00">scheduler</text>
+    <text x="690" y="502" class="m">the daily cron</text><text x="690" y="517" class="m">for ipo auto</text>
+    <text x="870" y="484" class="h" style="fill:#7a3e00">terminal</text>
+    <text x="870" y="502" class="m">screen, prompts,</text><text x="870" y="517" class="m">opens the browser</text>
+  </g>
+  <text x="420" y="438" text-anchor="middle" class="m" style="fill:#7a3e00;font-weight:600">platform sockets</text>
+
+  <!-- sockets -> outside world -->
+  <g stroke="#8c959f" stroke-width="1.4">
+    <line x1="150" y1="532" x2="150" y2="556" marker-end="url(#arrow)"/>
+    <line x1="330" y1="532" x2="330" y2="556" marker-end="url(#arrow)"/>
+    <line x1="510" y1="532" x2="510" y2="556" marker-end="url(#arrow)"/>
+    <line x1="690" y1="532" x2="690" y2="556" marker-end="url(#arrow)"/>
+    <line x1="870" y1="532" x2="870" y2="556" marker-end="url(#arrow)"/>
+  </g>
+  <g class="out">
+    <rect x="80" y="560" width="140" height="30" rx="15"/>
+    <rect x="260" y="560" width="140" height="30" rx="15"/>
+    <rect x="440" y="560" width="140" height="30" rx="15"/>
+    <rect x="620" y="560" width="140" height="30" rx="15"/>
+    <rect x="800" y="560" width="140" height="30" rx="15"/>
+  </g>
+  <g text-anchor="middle" class="s">
+    <text x="150" y="580" class="s code">~/.ipo/config.json</text>
+    <text x="330" y="580">MeroShare, CDSC</text>
+    <text x="510" y="580">your own email</text>
+    <text x="690" y="580">your computer</text>
+    <text x="870" y="580">your screen</text>
+  </g>
+
+  <!-- what is not allowed -->
+  <text x="32" y="626" class="s" style="fill:#cf222e;font-weight:600">Not allowed:</text>
+  <text x="122" y="626" class="s">a socket importing a module or the cli · a module touching files, the network or cron · any import cycle.</text>
+  <text x="32" y="646" class="m">Checked by <tspan class="code">npm run lint:deps</tspan> (dependency-cruiser) and a test that scans modules for <tspan class="code">fetch</tspan>.</text>
+</svg>
