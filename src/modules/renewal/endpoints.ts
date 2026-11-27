@@ -56,7 +56,7 @@ export interface PaymentInput {
 }
 
 const Field = z
-  .object({ name: z.string().optional(), key: z.string().optional(), fieldName: z.string().optional(), value: z.unknown(), fieldValue: z.unknown() })
+  .object({ name: z.string().optional(), key: z.string().optional(), fieldName: z.string().optional(), value: z.unknown().optional(), fieldValue: z.unknown().optional() })
   .loose()
   .transform((f) => ({ name: f.name ?? f.key ?? f.fieldName ?? '', value: String(f.value ?? f.fieldValue ?? '') }));
 
