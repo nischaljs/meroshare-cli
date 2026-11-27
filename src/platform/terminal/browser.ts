@@ -53,16 +53,19 @@ export function openPaymentPage(form: PaymentForm, opts: { open?: boolean } = {}
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipo-pay-'));
   const file = path.join(dir, `pay-${crypto.randomBytes(4).toString('hex')}.html`);
   fs.writeFileSync(file, html, { mode: 0o600 });
-  if (opts.open !== false) {
-    const [cmd, args] =
-      process.platform === 'darwin'
-        ? ['open', [file]]
-        : process.platform === 'win32'
-          ? ['cmd', ['/c', 'start', '""', file]]
-          : ['xdg-open', [file]];
-    const child = spawn(cmd, args as string[], { stdio: 'ignore', detached: true });
-    child.on('error', () => {});
-    child.unref();
-  }
+  if (opts.open !== false) openInBrowser(file);
   return file;
+}
+
+/** Opens a file path or an https address in the default browser. No shell is used. */
+export function openInBrowser(target: string): void {
+  const [cmd, args] =
+    process.platform === 'darwin'
+      ? ['open', [target]]
+      : process.platform === 'win32'
+        ? ['cmd', ['/c', 'start', '""', target]]
+        : ['xdg-open', [target]];
+  const child = spawn(cmd, args as string[], { stdio: 'ignore', detached: true });
+  child.on('error', () => {});
+  child.unref();
 }
