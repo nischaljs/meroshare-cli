@@ -143,7 +143,10 @@ export async function startFake(opts: FakeOptions): Promise<FakeMeroShare> {
       if (path.startsWith('/meroShare/applicantForm/report/detail/')) return json(200, u.reportDetail ?? {});
       if (path === '/payment/partner/') return json(200, opts.partners ?? [{ id: 1, partnerConfigId: 3, name: 'Test Wallet' }]);
       if (path.startsWith('/payment/initialDetails/')) {
-        return json(200, opts.initialDetails ?? { meroShareRenewalCharge: 50, dematRenewalCharge: 100, dematMaxRenewalYear: 3, paymentTypeList: ['MEROSHARE', 'DEMAT'] });
+        return json(200, opts.initialDetails ?? { meroshareRenewCharge: 50, dematRenewCharge: 100, dematMaxRenewalYear: 3, paymentTypeList: ['MEROSHARE', 'DEMAT'] });
+      }
+      if (req.method === 'POST' && path === '/payment/') {
+        return json(200, { url: 'http://127.0.0.1:9/wallet', paymentField: [{ name: 'amount', value: 150 }, { name: 'ref', value: 'R1' }] });
       }
       return json(404, { message: `No fake for ${req.method} ${path}` });
     });
