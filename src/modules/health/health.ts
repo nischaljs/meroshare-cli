@@ -43,7 +43,8 @@ function expiryFinding(kind: ExpiryKind, day: string | null, now: Date): Finding
   if (!day) return null;
   const left = daysLeft(day, now);
   const label = KIND_LABEL[kind];
-  if (left < 0) return { kind, severity: 'blocked', message: `${label} expired on ${day}`, daysLeft: left, fix: KIND_FIX[kind] };
+  // a date we computed only warns: only MeroShare's flags or a refusal block an account
+  if (left < 0) return { kind, severity: 'urgent', message: `${label} expired on ${day}`, daysLeft: left, fix: KIND_FIX[kind] };
   const when = left === 0 ? 'today' : `in ${left} day${left === 1 ? '' : 's'}`;
   if (left <= URGENT_DAYS) return { kind, severity: 'urgent', message: `${label} expires ${when} (${day})`, daysLeft: left, fix: KIND_FIX[kind] };
   if (left <= WARN_DAYS) return { kind, severity: 'warn', message: `${label} expires ${when} (${day})`, daysLeft: left, fix: KIND_FIX[kind] };
@@ -89,7 +90,7 @@ export function findingsFor(snapshot: HealthSnapshot, now: Date): Finding[] {
   ] as const) {
     const f = expiryFinding(kind, day, now);
     // an expired date the flags already report is said once
-    if (f && !(f.severity === 'blocked' && out.some((o) => o.kind === 'flag' && o.fix === f.fix))) out.push(f);
+    if (f && !((f.daysLeft ?? 0) < 0 && out.some((o) => o.kind === 'flag' && o.fix === f.fix))) out.push(f);
   }
   if (snapshot.bankLinked === false) out.push({ kind: 'bank', severity: 'blocked', message: 'No bank account is linked in MeroShare', fix: null });
   return out;

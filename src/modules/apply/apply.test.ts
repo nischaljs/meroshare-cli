@@ -78,3 +78,16 @@ test('auto-apply: categories by share type, kitta capped, below the minimum left
     await app.close();
   }
 });
+
+test('a passed expiry date with no MeroShare flag warns only: the account still applies', async () => {
+  const app = await startApp({ users: [user('a', { ownDetail: { expiredDate: '2020-01-01', dematExpiryDate: '2020-01-01' } })] });
+  try {
+    const plan = await planApply(app.ctx);
+    assert.equal(plan.skipped.length, 0);
+    assert.equal(plan.reports[0].status, 'urgent');
+    const results = await runApply(app.ctx, plan, [{ issue: plan.issues[0], kitta: 10 }]);
+    assert.deepEqual(results.map((r) => r.status), ['applied']);
+  } finally {
+    await app.close();
+  }
+});

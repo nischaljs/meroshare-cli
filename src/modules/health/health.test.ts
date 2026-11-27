@@ -66,7 +66,7 @@ test('passwordPolicyChanged alone warns, does not block', async () => {
 
 test('health days: expired, urgent within 7, warn within 30, nothing beyond', () => {
   const sev = (d: number) => findingsFor(snap({ meroshareExpiry: dayFrom(NOW, d) }), NOW)[0]?.severity ?? 'none';
-  assert.equal(sev(-1), 'blocked');
+  assert.equal(sev(-1), 'urgent'); // a computed date warns; only MeroShare blocks
   assert.equal(sev(0), 'urgent');
   assert.equal(sev(7), 'urgent');
   assert.equal(sev(8), 'warn');

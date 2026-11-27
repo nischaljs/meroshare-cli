@@ -19,5 +19,5 @@ export {
   type ExpiryKind,
 } from './health.js';
 export { HealthSection, type HealthSnapshot } from './state.js';
-export { toDay, daysLeft } from './dates.js';
+export { toDay, daysLeft, nepalDay } from './dates.js';
 export { doctorCommand } from './commands.js';
