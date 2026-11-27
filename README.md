@@ -1,160 +1,131 @@
-# ipo
+<!-- Images: https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/<file> (absolute, so they also show on npm) -->
 
-A CLI tool to bulk apply for IPOs on MeroShare (Nepal Stock Exchange) across multiple DEMAT accounts at once.
+# meroshare-cli
 
-No more logging into each account manually.
+Apply for an IPO on MeroShare for every account in your family, with one command: `ipo`.
 
-<!-- ![ipo apply](assets/apply.png) -->
-<!-- ![ipo result](assets/result.png) -->
+![The ipo command in a terminal: ipo doctor finds one account blocked by an expired password and one whose DEMAT expires in 9 days, ipo fix changes the expired password after a typed yes, and ipo apply applies from all three accounts.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/demo.gif)
 
-## Features
+[![npm version](https://img.shields.io/npm/v/meroshare-cli)](https://www.npmjs.com/package/meroshare-cli)
+[![license: MIT](https://img.shields.io/npm/l/meroshare-cli)](#license)
+[![node](https://img.shields.io/node/v/meroshare-cli)](https://nodejs.org/)
 
-- **Bulk Apply** — Apply for IPOs across all your accounts in one go
-- **Check Results** — See allotment status for every account in a single table
-- **Email Alerts** — Get notified when results come out or you get allotted
-- **Auto Apply** — Set preferences and let it apply automatically when new IPOs open
-- **Account health** — `ipo doctor` shows expired passwords, accounts, DEMAT and PIN problems before they stop an application; `ipo fix` repairs what it can
-- **Secure** — Your passwords and PINs never leave your machine. Everything is encrypted with AES-256-GCM
+## Why
 
-## Prerequisites
+Many of us look after MeroShare for the whole family: our own account, a parent's, a brother's. Each IPO means logging in to each one, one by one. Then one day an account does not work, because its password expired or its DEMAT needed renewal, and you find out too late.
 
-- [Node.js](https://nodejs.org/) v18 or higher
+- **One command for every account.** `ipo apply` applies from all of them.
+- **Never miss an IPO.** Turn on automatic mode and it checks every day.
+- **No surprise blocks.** It tells you before a password, a MeroShare account or a DEMAT expires, and changes passwords for you if you allow it.
 
-## Installation
+## Install
 
-```bash
-git clone https://github.com/nischal/nepse-ipo.git
-cd nepse-ipo
-npm install
-npm link
-```
-
-After this, the `ipo` command will be available globally in your terminal.
-
-## Getting Started
-
-### 1. Set up your accounts
+You need [Node.js](https://nodejs.org/) 18 or newer.
 
 ```bash
-ipo init
+npm install -g meroshare-cli
 ```
 
-This will walk you through:
-
-1. Setting a **master password** (used to encrypt everything)
-2. Selecting your **DP** (broker/bank) from a searchable list
-3. Entering your MeroShare **username** and **password**
-4. Entering your **BOID**, **CRN**, and **transaction PIN**
-
-It will validate your login immediately and auto-fetch your bank details.
-
-You can add multiple accounts in one go, or add more later:
+Then three commands:
 
 ```bash
-ipo init add       # Add another account
-ipo init list      # View all configured accounts
-ipo init edit      # Edit an existing account
-ipo init remove    # Remove an account
+ipo init     # set a master password and add your accounts
+ipo doctor   # check every account
+ipo apply    # apply for the open IPOs from every account
 ```
 
-### 2. Apply for IPOs
+## What it does for you
+
+| | Automatic | Needs you |
+| --- | --- | --- |
+| Apply for an IPO | Yes, from every healthy account. In automatic mode it only applies to the kinds you chose. | You say yes once (not in automatic mode). |
+| Check results | `ipo result` checks every account in one table. | Nothing. |
+| MeroShare password expires | Yes, if you turn on automatic password change. It sets a new strong password and emails you. | If it is off, run `ipo fix <account>` and type yes. |
+| MeroShare or DEMAT renewal | It warns you 30, 14, 7, 3 and 1 days before, and `ipo fix` opens the payment page. | You pay in eSewa, Khalti or ConnectIPS. |
+| Transaction PIN | `ipo doctor` tells you when it is missing. | You set it on the MeroShare website. |
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `ipo init` | Set up: master password and accounts. Also `ipo init add`, `list`, `edit`, `remove`. |
+| `ipo apply` | Apply for open IPOs from every account. |
+| `ipo result` | Check IPO results for every account. |
+| `ipo doctor` | Check every account. Reads only, changes nothing. |
+| `ipo fix <account>` | Fix one account: a new password, the renewal page, or what to do about the PIN. |
+| `ipo accounts password <account>` | Show the password ipo stored for an account. |
+| `ipo notify` | Set up email alerts (a Gmail app password or any SMTP server). |
+| `ipo auto` | The daily job: `config`, `start`, `run`, `stop`, `status`. |
+
+## Automatic mode
 
 ```bash
-ipo apply
+ipo auto config   # what to apply for (IPO, FPO, right shares), sectors, kitta, password change
+ipo auto start    # keep running and do the daily job (add --now to also run it once now)
+ipo auto run      # do the daily job once, now
+ipo auto status   # show your settings
+ipo auto stop     # stop it
 ```
 
-1. Shows all currently open IPOs in a table
-2. Asks which ones you want to apply for (Yes/No for each)
-3. Asks how many kitta
-4. Applies across **all your accounts** simultaneously
+Every day (10:00 by default) it does four things, in this order:
 
-<!-- ![ipo apply demo](assets/apply.png) -->
+1. Checks the health of every account.
+2. Changes a MeroShare password that expires within 7 days, or that MeroShare asks to change. Only if you turned this on.
+3. Sends renewal warnings, 30, 14, 7, 3 and 1 days before, each once.
+4. Applies for open IPOs that match your settings.
 
-### 3. Check results
+**Run it on a computer in Nepal.** MeroShare blocks traffic from outside Nepal, so a cloud server or GitHub Actions will not work. A home computer or a small box that stays on is enough.
+
+## Your data and safety
+
+- **What is stored:** your accounts (DP, username, BOID, bank), their passwords, CRN and PIN, your email settings and your choices. Nothing else.
+- **Where:** one file, `~/.ipo/config.json`, on your own computer. The folder can be read only by you (`700`) and so can the file (`600`).
+- **How:** every password, CRN and PIN is encrypted with AES-256-GCM. The key comes from your master password through PBKDF2 (100,000 rounds, SHA-512). The master password itself is never stored, only a salted hash to check it.
+- **Where data goes:** only to MeroShare (CDSC) and, if you set it up, to your own email. There is no server of ours, and no tracking.
+- **Writes are never retried.** An apply or a password change is sent once. If the network fails, ipo tells you and does not try again by itself, so nothing is applied twice.
+- **It asks first.** Every apply, password change and payment waits for your yes.
+- **Unofficial.** This tool is not made by or connected to CDSC or MeroShare. Use it at your own risk.
+
+**Forgot the master password?** It cannot be recovered, because it is not stored anywhere. Run `ipo init` again: it replaces the old file, and you add your accounts again. If ipo had changed a MeroShare password for you, reset that password on the MeroShare website.
+
+## नेपालीमा
+
+`ipo` ले परिवारका सबै MeroShare खाताबाट एउटै command मा IPO भरिदिन्छ। पासवर्ड वा DEMAT को म्याद सकिन लाग्यो भने पहिल्यै भनिदिन्छ, त्यसैले खाता अचानक बन्द हुँदैन।
+
+तपाईंका पासवर्ड र PIN तपाईंकै कम्प्युटरमा, ताल्चा लगाएर (encrypt गरेर) राखिन्छन्। MeroShare बाहेक अरू कतै पठाइँदैन।
+
+यसरी सुरु गर्नुहोस् (पहिले [Node.js](https://nodejs.org/) राख्नुहोस्):
 
 ```bash
-ipo result
+npm install -g meroshare-cli
+ipo init     # master password राख्ने र खाताहरू थप्ने
+ipo doctor   # सबै खाता ठीक छन् कि छैनन् हेर्ने
+ipo apply    # खुला IPO सबै खाताबाट भर्ने
 ```
 
-Shows a table with allotment status for every account:
-
-- **ALLOTTED** — You got shares (shows how many kitta received)
-- **NOT ALLOTTED** — Better luck next time
-- **ERROR** — Something went wrong (e.g., block failed)
-
-Also offers to open the [public result site](https://iporesult.cdsc.com.np) in your browser for early results (MeroShare can be ~24h behind).
-
-<!-- ![ipo result demo](assets/result.png) -->
-
-### 4. Check account health
-
-```bash
-ipo doctor            # One table: password, MeroShare and DEMAT expiry, PIN, bank, what to fix
-ipo fix <account>     # Change the password, pay a renewal, or explain how to set the PIN
-ipo accounts password <account>   # Show the stored MeroShare password (after ipo changed it)
-```
-
-`ipo doctor` only reads from MeroShare. Every command prints one line when an account expires within 30 days or is blocked, from the last check, with no extra login.
-
-`ipo apply` skips a blocked account and says why. A 401 "Role Not Authorized" from MeroShare usually means an expired password, account or DEMAT: run `ipo doctor`.
-
-`ipo fix` asks before it changes anything. A renewal opens MeroShare's payment page in your browser; you pay there.
-
-### 5. Email notifications (optional)
-
-```bash
-ipo notify
-```
-
-Set up email alerts so you don't have to keep checking manually. Uses Gmail app passwords (or any SMTP).
-
-Events you can get notified about:
-- When an application is submitted
-- When results come out
-- When you get allotted / not allotted
-- Before an account or DEMAT expires (30, 14, 7, 3 and 1 days before, each once)
-- When ipo changes a password, or an account is blocked
-
-### 6. Auto-apply (optional)
-
-```bash
-ipo auto config       # Set preferences (IPO/FPO/Right, sectors, max kitta, automatic password change)
-ipo auto start        # Start the scheduler (--now also runs once at start)
-ipo auto run          # Run the daily job once, now
-ipo auto stop         # Stop a running scheduler
-ipo auto status       # View current config
-```
-
-Set your preferences once, and the tool will automatically apply when matching IPOs open. Each run checks account health, changes passwords if you turned that on, sends renewal reminders, then applies.
-
-Automatic password change is off by default. When on, ipo changes a MeroShare password within 7 days of its expiry, or when MeroShare asks for a new one, and emails you. The new password is stored encrypted; see it with `ipo accounts password <account>`.
-
-## Is my data safe?
-
-**Yes. Your credentials never leave your computer.**
-
-- All sensitive data (passwords, PINs, CRN) is **encrypted with AES-256-GCM**
-- The encryption key is derived from your master password using **PBKDF2** (100,000 iterations, SHA-512)
-- Your master password itself is **never stored** — only a salted PBKDF2 hash for verification
-- Config is saved at `~/.ipo/config.json` in your home directory with restricted file permissions (`600`)
-- Nothing is sent anywhere except directly to MeroShare's own servers (`webbackend.cdsc.com.np`)
-- The code is fully open source — you can verify everything yourself
-
-## Troubleshooting
-
-**"Application in process"** — You've already applied for this IPO with that account.
-
-**"Login failed"** — Check your DP, username, and password. You can update them with `ipo init edit`.
-
-**"Role Not Authorized"** — MeroShare refused the account after login. The password, account or DEMAT has likely expired. Run `ipo doctor`, then `ipo fix <account>`.
-
-**Results showing "NOT ALLOTTED" for everything** — Results may take ~24 hours to appear on MeroShare after the public site. Use `ipo result` to open the public site for early results.
-
-**Min/Max kitta showing "undefined"** — Some IPOs don't specify min/max units in the API. Enter kitta manually (usually 10 for ordinary shares).
+हरेक दिन आफैँ IPO भर्न `ipo auto start` चलाउनुहोस्। यो नेपालभित्रकै कम्प्युटरमा चलाउनुपर्छ, किनकि MeroShare ले विदेशबाट आउने request रोक्छ।
 
 ## For developers
 
-How the code is laid out (sockets and modules) and the rules that keep it that way: [ARCHITECTURE.md](ARCHITECTURE.md). `npm run check` runs the type check, the dependency rules and the tests.
+![How ipo is built: the cli on top, the modules in the middle, and the platform sockets store, meroshare, notify, scheduler and terminal at the bottom. Imports only go down.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/architecture.svg)
+
+![One ipo apply, step by step: the command, then session, health, issues and apply, each calling MeroShare through the meroshare socket, then store and notify.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/flow.gif)
+
+- **Sockets** (`src/platform/*`) are the only code that touches the outside world: the config file, MeroShare, email, cron and the terminal.
+- **Modules** (`src/modules/*`) hold the product logic. Each one plugs into the sockets and talks to another module only through its `public.ts`.
+- **The cli** (`src/cli`) wires the commands together. `npm run lint:deps` fails any import that breaks these rules.
+
+The full picture, with the rules and the data flow: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+```bash
+npm install
+npm test          # the tests, on a fake MeroShare server (never the real one)
+npm run check     # type check, dependency rules and tests
+```
+
+To contribute, open an issue or a pull request. Keep a change inside one module where you can, add a test next to it, and run `npm run check` before you push.
+
+The pictures here can be made again: `scripts/demo/record.sh` records the terminal GIF on the fake server (needs [vhs](https://github.com/charmbracelet/vhs)), and `docs/media/src/render-flow.sh` renders the flow animation from `docs/media/src/flow.html`.
 
 ## License
 
