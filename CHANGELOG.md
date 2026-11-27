@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 (2026-11-27)
+
+- Published from GitHub Actions with npm provenance, so npm shows which commit built it. What `ipo` does has not changed.
+- The `bin` paths in package.json no longer start with `./`, which npm warned about when publishing.
+
 ## 1.0.0 (2026-11-27)
 
 The first release on npm. Install it with `npm install -g meroshare-cli`; the command is `ipo`.
