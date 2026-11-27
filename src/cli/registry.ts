@@ -50,7 +50,7 @@ export function buildProgram(commands: CommandDef[], opts: RegistryOptions): Com
   const program = new Command()
     .name('ipo')
     .description('Bulk MeroShare IPO CLI tool for Nepal Stock Exchange')
-    .version('1.0.0');
+    .version('1.0.1');
   for (const def of commands) attach(program, def, opts);
   return program;
 }

@@ -1,6 +1,6 @@
 {
   "name": "meroshare-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Apply for NEPSE IPOs on MeroShare from every family account with one command. Runs only on your computer: passwords stay encrypted on your device and go to MeroShare only.",
   "keywords": [
     "nepse",
@@ -24,8 +24,8 @@
     "node": "^18.17.0 || >=20.5.0"
   },
   "bin": {
-    "ipo": "./dist/bin/cli.js",
-    "meroshare-cli": "./dist/bin/cli.js"
+    "ipo": "dist/bin/cli.js",
+    "meroshare-cli": "dist/bin/cli.js"
   },
   "files": [
     "dist/bin/**/*.js",
