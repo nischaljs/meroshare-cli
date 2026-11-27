@@ -33,7 +33,7 @@ test('a version 1 config opens with the same master password and reads every val
   const email = store.section(EmailSection).read().value!;
   assert.equal(email.appPassword, 'app-secret');
   assert.equal(email.events.notAllocated, false);
-  assert.deepEqual(store.section(HealthSection).read().value, { snapshots: {}, remindersSent: [] });
+  assert.deepEqual(store.section(HealthSection).read().value, { snapshots: {}, remindersSent: [], blockedNotified: {} });
 
   // reading never rewrites the file
   assert.equal(fs.readFileSync(file, 'utf-8'), before);
