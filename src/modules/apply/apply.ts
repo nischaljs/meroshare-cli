@@ -189,7 +189,6 @@ export function autoKitta(issue: Issue, maxKitta: number): number | null {
   return kitta;
 }
 
-/** Applies, with no prompts, for every open issue in the categories. */
 export class ApplyBusyError extends Error {
   constructor(readonly pid: number) {
     super('Another ipo apply is running');
@@ -210,6 +209,7 @@ export function lockApply(ctx: AppContext): RunLock {
   }
 }
 
+/** Applies, with no prompts, for every open issue in the categories. */
 export async function autoApply(
   ctx: AppContext,
   opts: AutoApplyOptions,
