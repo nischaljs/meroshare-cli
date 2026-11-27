@@ -57,6 +57,8 @@ export function defineSection<S extends z.ZodType>(
   return { name, build: build as unknown as (kit: SchemaKit) => z.ZodType<z.output<S>> };
 }
 
+export type SectionValue<D> = D extends SectionDef<infer T> ? T : never;
+
 export interface Snapshot<T> {
   value: T;
   revision: number;

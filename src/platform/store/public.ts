@@ -8,6 +8,7 @@ export {
   WrongMasterPasswordError,
   type Section,
   type SectionDef,
+  type SectionValue,
   type SchemaKit,
   type Snapshot,
   type StoreOptions,
