@@ -4,6 +4,7 @@ export {
   runApply,
   closeAll,
   autoKitta,
+  autoApply,
   type ApplyPlan,
   type ApplyResult,
   type ApplyStatus,

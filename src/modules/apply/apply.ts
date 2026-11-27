@@ -3,7 +3,7 @@ import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public
 import { pacedMap } from '../../platform/terminal/public.js';
 import { getBankDetail, getBanks, listAccounts, type Account } from '../accounts/public.js';
 import { checkSession, recordHealth, type HealthReport, loginFailedReport } from '../health/public.js';
-import { hasActed, listIssues, type Issue } from '../issues/public.js';
+import { hasActed, listIssues, matchesCategories, type Issue } from '../issues/public.js';
 import { closeSession, openSessions, type Session } from '../session/public.js';
 import { ApplyEndpoint } from './endpoints.js';
 
@@ -174,9 +174,28 @@ export interface AutoApplyOptions {
   maxKitta: number;
 }
 
-/** The kitta auto-apply asks for: the smaller of the setting and the issue's maximum, at least the minimum. */
-export function autoKitta(issue: Issue, maxKitta: number): number {
-  const max = issue.maxUnit ?? maxKitta;
-  const min = issue.minUnit ?? 1;
-  return Math.max(min, Math.min(maxKitta, max));
+/**
+ * The kitta auto-apply asks for: the setting, capped at the issue's maximum.
+ * Null when the setting is below the issue's minimum (the issue is left out).
+ */
+export function autoKitta(issue: Issue, maxKitta: number): number | null {
+  const kitta = Math.min(maxKitta, issue.maxUnit ?? maxKitta);
+  if (issue.minUnit !== undefined && kitta < issue.minUnit) return null;
+  return kitta;
+}
+
+/** Applies, with no prompts, for every open issue in the categories. */
+export async function autoApply(ctx: AppContext, opts: AutoApplyOptions): Promise<{ plan: ApplyPlan; results: ApplyResult[] }> {
+  const plan = await planApply(ctx);
+  const selections: Selection[] = [];
+  for (const issue of plan.issues) {
+    if (!matchesCategories(issue, opts.categories)) continue;
+    const kitta = autoKitta(issue, opts.maxKitta);
+    if (kitta !== null) selections.push({ issue, kitta });
+  }
+  if (!selections.length) {
+    await closeAll(ctx, plan.sessions);
+    return { plan, results: [] };
+  }
+  return { plan, results: await runApply(ctx, plan, selections) };
 }

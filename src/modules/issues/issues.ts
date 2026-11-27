@@ -15,6 +15,6 @@ export function hasActed(issue: Issue): boolean {
 /** Category filter of auto-apply: the issue's share type contains one of the categories. Empty means all. */
 export function matchesCategories(issue: Issue, categories: string[]): boolean {
   if (!categories.length) return true;
-  const type = `${issue.shareTypeName} ${issue.shareGroupName}`.toLowerCase();
+  const type = issue.shareTypeName.toLowerCase();
   return categories.some((c) => type.includes(c.toLowerCase()));
 }
