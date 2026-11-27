@@ -13,6 +13,7 @@ No more logging into each account manually.
 - **Check Results** — See allotment status for every account in a single table
 - **Email Alerts** — Get notified when results come out or you get allotted
 - **Auto Apply** — Set preferences and let it apply automatically when new IPOs open
+- **Account health** — `ipo doctor` shows expired passwords, accounts, DEMAT and PIN problems before they stop an application; `ipo fix` repairs what it can
 - **Secure** — Your passwords and PINs never leave your machine. Everything is encrypted with AES-256-GCM
 
 ## Prerequisites
@@ -85,7 +86,21 @@ Also offers to open the [public result site](https://iporesult.cdsc.com.np) in y
 
 <!-- ![ipo result demo](assets/result.png) -->
 
-### 4. Email notifications (optional)
+### 4. Check account health
+
+```bash
+ipo doctor            # One table: password, MeroShare and DEMAT expiry, PIN, bank, what to fix
+ipo fix <account>     # Change the password, pay a renewal, or explain how to set the PIN
+ipo accounts password <account>   # Show the stored MeroShare password (after ipo changed it)
+```
+
+`ipo doctor` only reads from MeroShare. Every command prints one line when an account expires within 30 days or is blocked, from the last check, with no extra login.
+
+`ipo apply` skips a blocked account and says why. A 401 "Role Not Authorized" from MeroShare usually means an expired password, account or DEMAT: run `ipo doctor`.
+
+`ipo fix` asks before it changes anything. A renewal opens MeroShare's payment page in your browser; you pay there.
+
+### 5. Email notifications (optional)
 
 ```bash
 ipo notify
@@ -97,17 +112,22 @@ Events you can get notified about:
 - When an application is submitted
 - When results come out
 - When you get allotted / not allotted
+- Before an account or DEMAT expires (30, 14, 7, 3 and 1 days before, each once)
+- When ipo changes a password, or an account is blocked
 
-### 5. Auto-apply (optional)
+### 6. Auto-apply (optional)
 
 ```bash
-ipo auto config    # Set preferences (IPO/FPO/Right, sectors, max kitta)
-ipo auto start     # Start the scheduler
-ipo auto stop      # Stop it
-ipo auto status    # View current config
+ipo auto config       # Set preferences (IPO/FPO/Right, sectors, max kitta, automatic password change)
+ipo auto start        # Start the scheduler (--now also runs once at start)
+ipo auto run          # Run the daily job once, now
+ipo auto stop         # Stop a running scheduler
+ipo auto status       # View current config
 ```
 
-Set your preferences once, and the tool will automatically apply when matching IPOs open.
+Set your preferences once, and the tool will automatically apply when matching IPOs open. Each run checks account health, changes passwords if you turned that on, sends renewal reminders, then applies.
+
+Automatic password change is off by default. When on, ipo changes a MeroShare password within 7 days of its expiry, or when MeroShare asks for a new one, and emails you. The new password is stored encrypted; see it with `ipo accounts password <account>`.
 
 ## Is my data safe?
 
@@ -115,7 +135,7 @@ Set your preferences once, and the tool will automatically apply when matching I
 
 - All sensitive data (passwords, PINs, CRN) is **encrypted with AES-256-GCM**
 - The encryption key is derived from your master password using **PBKDF2** (100,000 iterations, SHA-512)
-- Your master password itself is **never stored** — only a bcrypt hash for verification
+- Your master password itself is **never stored** — only a salted PBKDF2 hash for verification
 - Config is saved at `~/.ipo/config.json` in your home directory with restricted file permissions (`600`)
 - Nothing is sent anywhere except directly to MeroShare's own servers (`webbackend.cdsc.com.np`)
 - The code is fully open source — you can verify everything yourself
@@ -126,9 +146,15 @@ Set your preferences once, and the tool will automatically apply when matching I
 
 **"Login failed"** — Check your DP, username, and password. You can update them with `ipo init edit`.
 
+**"Role Not Authorized"** — MeroShare refused the account after login. The password, account or DEMAT has likely expired. Run `ipo doctor`, then `ipo fix <account>`.
+
 **Results showing "NOT ALLOTTED" for everything** — Results may take ~24 hours to appear on MeroShare after the public site. Use `ipo result` to open the public site for early results.
 
 **Min/Max kitta showing "undefined"** — Some IPOs don't specify min/max units in the API. Enter kitta manually (usually 10 for ordinary shares).
+
+## For developers
+
+How the code is laid out (sockets and modules) and the rules that keep it that way: [ARCHITECTURE.md](ARCHITECTURE.md). `npm run check` runs the type check, the dependency rules and the tests.
 
 ## License
 
