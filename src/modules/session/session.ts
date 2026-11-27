@@ -25,9 +25,16 @@ export class AccountBlockedError extends Error {
 }
 
 export class LoginError extends Error {
-  constructor(readonly account: Account, readonly cause: unknown) {
+  /**
+   * MeroShare refused the stored password and there was no pending one to try. Not set for
+   * no answer (network, 5xx, bot page, timeout) or a refusal of the account itself.
+   */
+  readonly wrongPassword: boolean;
+  constructor(readonly account: Account, readonly cause: unknown, triedPending = false) {
     super(`${account.name}: login failed: ${friendlyMessage(cause)}`);
     this.name = 'LoginError';
+    // only a plain 401: a 400 or 403 may be a gateway or a firewall, not the password
+    this.wrongPassword = !triedPending && isInvalidCredentials(cause) && (cause as MeroShareError).status === 401;
   }
 }
 
@@ -83,7 +90,7 @@ export async function openSession(ctx: AppContext, account: Account): Promise<Se
     try {
       res = await loginWith(ctx, account, account.pendingPassword);
     } catch (err2) {
-      throw new LoginError(account, err2);
+      throw new LoginError(account, err2, true);
     }
     current = promotePendingPassword(ctx, accountId(account), account.pendingPassword);
     recoveredPending = true;
@@ -107,7 +114,12 @@ export async function closeSession(ctx: AppContext, session: Session): Promise<v
 
 export type SessionOutcome =
   | { account: Account; ok: true; session: Session }
-  | { account: Account; ok: false; error: string; held?: true };
+  | { account: Account; ok: false; error: string; held?: true; wrongPassword?: true };
+
+function failed(account: Account, err: unknown): SessionOutcome {
+  const error = err instanceof Error ? err.message : String(err);
+  return err instanceof LoginError && err.wrongPassword ? { account, ok: false, error, wrongPassword: true } : { account, ok: false, error };
+}
 
 /** Opens sessions for many accounts, two at a time with a gap between starts. Never throws. */
 export async function openSessions(ctx: AppContext, accounts: Account[]): Promise<SessionOutcome[]> {
@@ -115,7 +127,7 @@ export async function openSessions(ctx: AppContext, accounts: Account[]): Promis
     try {
       return { account, ok: true as const, session: await openSession(ctx, account) };
     } catch (err) {
-      return { account, ok: false as const, error: err instanceof Error ? err.message : String(err) };
+      return failed(account, err);
     }
   });
 }
@@ -150,7 +162,7 @@ export function createSessionPool(ctx: AppContext): SessionPool {
   const open = (account: Account): Promise<SessionOutcome> =>
     openSession(ctx, account).then(
       (session) => ({ account, ok: true as const, session }),
-      (err) => ({ account, ok: false as const, error: err instanceof Error ? err.message : String(err) }),
+      (err) => failed(account, err),
     );
 
   const pool: SessionPool = {

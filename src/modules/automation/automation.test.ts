@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runDaily, DAILY_STEPS, AutoSection, type AutomationStep } from './public.js';
-import { accountId, listAccounts, setPendingPassword } from '../accounts/public.js';
+import { accountId, listAccounts, setPendingPassword, updateAccount } from '../accounts/public.js';
 import { cachedReports, markPasswordUnconfirmed, runDoctor } from '../health/public.js';
+import { createSessionPool } from '../session/public.js';
 import { startApp, dayFrom } from '../../../test/fake-meroshare/app.js';
 
 const NOW = new Date(2026, 10, 27, 10);
@@ -118,7 +119,7 @@ test('one login per account per run: steps share it; a failed login is not tried
     const applied = app.fake.requests.filter((r) => r.path === '/meroShare/applicantForm/share/apply').map((r) => r.user);
     assert.deepEqual([...applied].sort(), ['good', 'pending', 'rotates']);
     const wrong = cachedReports(app.ctx).find((r) => r.account.username === 'wrong')!;
-    assert.equal(wrong.status, 'error');
+    assert.equal(wrong.status, 'blocked'); // MeroShare said the password is wrong: held from the next run
     assert.ok(wrong.snapshot.error);
   } finally {
     await app.close();
@@ -136,6 +137,10 @@ test('a wrong pending password counts inside the one attempt: two tries at most'
     await app.close();
   }
 });
+
+const UNTIL =
+  'It stays held until you check it again with "ipo doctor" (or "ipo fix"); a fix made on the MeroShare website is not seen until then';
+const blockedMails = (app: { emails: { subject: string }[] }) => app.emails.filter((e) => e.subject.includes('is blocked'));
 
 // the fake marks an issue applied on the object it was given: each user gets its own copy
 const fresh = () => ({ ...issue, action: null });
@@ -155,6 +160,9 @@ test('a blocked account is held: no login in later runs, the report and email st
   try {
     await runDaily(app.ctx, settings());
     assert.equal(loginsOf(app, 'dead'), 1); // the run that finds the block logs in once
+    // the run that finds the block sends one email about it
+    assert.deepEqual(blockedMails(app).map((e) => e.subject), ['[IPO CLI] Ram is blocked: the daily run makes no login with it']);
+    assert.ok(blockedMails(app)[0] && (blockedMails(app)[0] as { text?: string }).text?.includes('run "ipo fix Ram"'));
     const before = cachedReports(app.ctx).find((r) => r.account.username === 'dead')!.snapshot;
 
     // a new issue opens, so the second run applies for Sita and sends the results email
@@ -163,7 +171,10 @@ test('a blocked account is held: no login in later runs, the report and email st
     const bag = await runDaily(app.ctx, settings());
     assert.equal(loginsOf(app, 'dead'), 1, bag.lines.join('\n')); // no login in the second run
     assert.equal(loginsOf(app, 'ok'), 2);
-    assert.ok(bag.lines.includes('health: skipped Ram: blocked: MeroShare account has expired. No login until it is fixed: run "ipo fix Ram"'), bag.lines.join('\n'));
+    assert.ok(bag.lines.includes(`health: skipped Ram: blocked: MeroShare account has expired. To fix it: run "ipo fix Ram". ${UNTIL}`), bag.lines.join('\n'));
+    // each account counted once: Sita checked, Ram held
+    assert.ok(bag.lines.includes('health: 1 account(s) checked, 0 need attention, 1 blocked and not logged in'), bag.lines.join('\n'));
+    assert.equal(blockedMails(app).length, 0); // no second email while the same block holds
     assert.ok(bag.lines.some((l) => l.startsWith('apply: skipped Ram: blocked: MeroShare account has expired') && l.includes('ipo fix Ram')));
     // the saved check is kept as it was, so the account stays held
     assert.deepEqual(cachedReports(app.ctx).find((r) => r.account.username === 'dead')!.snapshot, before);
@@ -177,6 +188,12 @@ test('a blocked account is held: no login in later runs, the report and email st
     const after = await runDaily(app.ctx, settings());
     assert.equal(loginsOf(app, 'dead'), 3);
     assert.ok(!after.lines.some((l) => l.includes('skipped Ram')), after.lines.join('\n'));
+
+    // blocked again later: a new hold, so a new email
+    app.emails.length = 0;
+    app.fake.users.get('dead')!.flags = { accountExpired: true };
+    await runDaily(app.ctx, settings());
+    assert.equal(blockedMails(app).length, 1);
   } finally {
     await app.close();
   }
@@ -193,7 +210,7 @@ test('a password ipo could not confirm: the next run makes no login (before: sto
     assert.equal(app.fake.count('POST', '/meroShare/auth/'), 0);
     assert.equal(app.fake.count('POST', '/meroShare/changePassword/'), 0);
     const line = bag.lines.find((l) => l.startsWith('health: skipped Ram'));
-    assert.ok(line?.includes('ipo init edit (check the password of Ram), then run "ipo fix Ram"'), bag.lines.join('\n'));
+    assert.ok(line?.includes('store it with "ipo init edit Ram", then run "ipo fix Ram"'), bag.lines.join('\n'));
   } finally {
     await app.close();
   }
@@ -231,6 +248,89 @@ test('an expired password with a block the change does not fix is held even with
     assert.equal(loginsOf(app, 'u1'), 1);
     assert.equal(app.fake.count('POST', '/meroShare/changePassword/'), 0);
     assert.ok(bag.lines.some((l) => l.startsWith('password: skipped Ram: blocked:')), bag.lines.join('\n'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('a wrong password is held: no login on the next run until a check with the right password', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'Old-Pass1!', name: 'Ram', issues: [fresh()] }], now: NOW, email: true });
+  try {
+    app.fake.users.get('u1')!.password = 'Server-Pass1!'; // changed on the MeroShare website
+    await runDaily(app.ctx, settings());
+    assert.equal(loginsOf(app, 'u1'), 1);
+    assert.equal(blockedMails(app).length, 1);
+    const bag = await runDaily(app.ctx, settings());
+    assert.equal(loginsOf(app, 'u1'), 1, bag.lines.join('\n')); // 0 logins on the second run
+    const line = bag.lines.find((l) => l.startsWith('health: skipped Ram'));
+    assert.ok(line?.includes('MeroShare says the stored password is wrong'), bag.lines.join('\n'));
+    assert.ok(line?.includes('store the right password with "ipo init edit Ram", then run "ipo fix Ram"'), line);
+    assert.equal(blockedMails(app).length, 1);
+
+    // the person stores the right password, then checks it
+    const a = listAccounts(app.ctx)[0];
+    updateAccount(app.ctx, accountId(a), (x) => ({ ...x, password: 'Server-Pass1!' }));
+    await runDoctor(app.ctx);
+    assert.equal(cachedReports(app.ctx)[0].status, 'ok');
+    const after = await runDaily(app.ctx, settings());
+    assert.equal(loginsOf(app, 'u1'), 3, after.lines.join('\n'));
+    assert.equal(app.fake.count('POST', '/meroShare/applicantForm/share/apply'), 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('a MeroShare outage at login is not held: the next run tries again', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'Old-Pass1!', name: 'Ram', issues: [fresh()] }], now: NOW, failFirst: { '/meroShare/auth/': 20 } });
+  try {
+    await runDaily(app.ctx, settings());
+    const first = app.fake.count('POST', '/meroShare/auth/');
+    assert.ok(first >= 1);
+    assert.equal(cachedReports(app.ctx)[0].status, 'error');
+    await runDaily(app.ctx, settings());
+    assert.ok(app.fake.count('POST', '/meroShare/auth/') > first);
+  } finally {
+    await app.close();
+  }
+});
+
+test('no bank linked: the held line names the real action, not ipo fix', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'Old-Pass1!', name: 'Ram', banks: [], issues: [fresh()] }], now: NOW });
+  try {
+    await runDaily(app.ctx, settings());
+    const bag = await runDaily(app.ctx, settings());
+    assert.equal(loginsOf(app, 'u1'), 1);
+    const line = bag.lines.find((l) => l.startsWith('health: skipped Ram'));
+    assert.ok(line?.includes('To fix it: link a bank account on the MeroShare website, then run "ipo doctor"'), bag.lines.join('\n'));
+    assert.ok(!line?.includes('ipo fix Ram'), line);
+  } finally {
+    await app.close();
+  }
+});
+
+test('the last checks cannot be read: no login with any account, apply skipped', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'Old-Pass1!', name: 'Ram', issues: [fresh()] }], now: NOW });
+  try {
+    app.breakSection('health', { snapshots: 'broken' });
+    const bag = await runDaily(app.ctx, settings());
+    assert.equal(app.fake.count('POST', '/meroShare/auth/'), 0, bag.lines.join('\n'));
+    assert.equal(app.fake.count('POST', '/meroShare/applicantForm/share/apply'), 0);
+    assert.ok(bag.lines.some((l) => l.startsWith('health: ipo could not read the last health checks') && l.includes('apply included, is skipped')), bag.lines.join('\n'));
+    assert.ok(bag.lines.some((l) => l.startsWith('apply: skipped Ram: ipo could not read the last health checks')), bag.lines.join('\n'));
+  } finally {
+    await app.close();
+  }
+});
+
+test('a held account with no saved check keeps the hold: runDoctor saves nothing for it', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'Old-Pass1!', name: 'Ram' }], now: NOW });
+  try {
+    const pool = createSessionPool(app.ctx);
+    pool.hold(listAccounts(app.ctx)[0], 'held for the test');
+    const reports = await runDoctor(app.ctx, pool);
+    assert.equal(reports.length, 0);
+    assert.equal(cachedReports(app.ctx).length, 0);
+    assert.equal(app.fake.count('POST', '/meroShare/auth/'), 0);
   } finally {
     await app.close();
   }

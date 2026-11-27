@@ -33,6 +33,7 @@ const KIND_FIX: Record<ExpiryKind, Finding['fix']> = { password: 'password', mer
 export const WARN_DAYS = 30;
 const ROLE_REFUSED = 'MeroShare refused the account (Role Not Authorized)';
 const PASSWORD_UNCONFIRMED = 'Neither the old nor the new password works after a password change';
+const WRONG_PASSWORD = 'MeroShare says the stored password is wrong';
 export const URGENT_DAYS = 7;
 
 function worst(findings: Finding[]): Severity {
@@ -73,6 +74,7 @@ function fixText(account: Account, findings: Finding[]): string | null {
   const ranked = [...findings].sort((a, b) => ORDER.indexOf(b.severity) - ORDER.indexOf(a.severity));
   const top = ranked.find((f) => f.fix);
   if (!top) return null;
+  if (top.fix === 'login' && top.message.startsWith(WRONG_PASSWORD)) return `ipo init edit ${accountRef(account)}, then ipo fix ${accountRef(account)}`;
   if (top.fix === 'login') return `ipo init edit (check the password of ${account.name})`;
   return `ipo fix ${accountRef(account)}`;
 }
@@ -82,6 +84,7 @@ export function findingsFor(snapshot: HealthSnapshot, now: Date): Finding[] {
   const out: Finding[] = [];
   if (snapshot.error?.startsWith(ROLE_REFUSED)) out.push({ kind: 'login', severity: 'blocked', message: snapshot.error, fix: null });
   else if (snapshot.error?.startsWith(PASSWORD_UNCONFIRMED)) out.push({ kind: 'login', severity: 'blocked', message: snapshot.error, fix: 'login' });
+  else if (snapshot.error?.startsWith(WRONG_PASSWORD)) out.push({ kind: 'login', severity: 'blocked', message: WRONG_PASSWORD, fix: 'login' });
   else if (snapshot.error) out.push({ kind: 'login', severity: 'error', message: snapshot.error, fix: 'login' });
   out.push(...flagFindings(snapshot.flags));
   for (const [kind, day] of [
@@ -140,9 +143,33 @@ export async function checkSession(ctx: AppContext, session: Session): Promise<H
   return reportFor(session.account, snap, now);
 }
 
-export function loginFailedReport(ctx: AppContext, account: Account, error: string): HealthReport {
+/**
+ * A login that failed. `wrongPassword`: MeroShare refused the stored password (a 401, no
+ * pending one), which blocks the account until the person stores the right one. Any other
+ * failure (no answer, an outage) is an `error` only, so one bad day does not stop applies.
+ */
+export function loginFailedReport(ctx: AppContext, account: Account, error: string, opts: { wrongPassword?: boolean } = {}): HealthReport {
   const now = ctx.now();
-  return reportFor(account, { ...baseSnapshot(account, now), error }, now);
+  return reportFor(account, { ...baseSnapshot(account, now), error: opts.wrongPassword ? `${WRONG_PASSWORD} (${error})` : error }, now);
+}
+
+/** What the person does about one finding, in words. */
+function actionFor(f: Finding, account: Account): string {
+  const ref = accountRef(account);
+  if (f.kind === 'pin') return `set the transaction PIN on the MeroShare website, store it with "ipo init edit ${ref}", then run "ipo doctor"`;
+  if (f.kind === 'bank') return 'link a bank account on the MeroShare website, then run "ipo doctor"';
+  if (f.kind === 'login') {
+    if (f.message.startsWith(WRONG_PASSWORD)) return `store the right password with "ipo init edit ${ref}", then run "ipo fix ${ref}"`;
+    if (f.message.startsWith(PASSWORD_UNCONFIRMED)) return `log in on the MeroShare website to see which password works, store it with "ipo init edit ${ref}", then run "ipo fix ${ref}"`;
+    if (f.message.startsWith(ROLE_REFUSED)) return 'check the password, the MeroShare account and the DEMAT on the MeroShare website, then run "ipo doctor"';
+    return `check the password with "ipo init edit ${ref}", then run "ipo doctor"`;
+  }
+  return `run "ipo fix ${ref}"`;
+}
+
+/** What the person does about each finding that blocks the account, once each, worst first. */
+export function blockedActions(report: HealthReport): string[] {
+  return [...new Set(report.findings.filter((f) => f.severity === 'blocked').map((f) => actionFor(f, report.account)))];
 }
 
 /** Saves the reports as the last check of each account. */
@@ -199,17 +226,25 @@ export async function runDoctor(ctx: AppContext, pool?: SessionPool): Promise<He
   const own = pool ?? createSessionPool(ctx);
   try {
     const outcomes = await own.getMany(listAccounts(ctx));
-    const cached = new Map(cachedReports(ctx).map((r) => [accountId(r.account), r]));
+    let cached = new Map<string, HealthReport>();
+    if (outcomes.some((o) => !o.ok && o.held)) {
+      try {
+        cached = new Map(cachedReports(ctx).map((r) => [accountId(r.account), r]));
+      } catch {
+        // unreadable: the held accounts get no report, and nothing is saved for them
+      }
+    }
     const fresh: HealthReport[] = [];
     const reports: HealthReport[] = [];
     for (const o of outcomes) {
-      // a held account made no login: its last check stands, unchanged
-      const held = !o.ok && o.held ? cached.get(accountId(o.account)) : undefined;
-      if (held) {
-        reports.push(held);
+      // a held account made no login: its last check stands, unchanged, and is never saved
+      // again (a login-failed report would replace the block and end the hold)
+      if (!o.ok && o.held) {
+        const last = cached.get(accountId(o.account));
+        if (last) reports.push(last);
         continue;
       }
-      const r = o.ok ? await checkSession(ctx, o.session) : loginFailedReport(ctx, o.account, o.error);
+      const r = o.ok ? await checkSession(ctx, o.session) : loginFailedReport(ctx, o.account, o.error, { wrongPassword: o.wrongPassword });
       fresh.push(r);
       reports.push(r);
     }
@@ -311,5 +346,41 @@ export function moveHealth(ctx: AppContext, fromId: string, toId: string): void 
       delete h.snapshots[fromId];
     }
     h.remindersSent = h.remindersSent.map((k) => (k.startsWith(`${fromId}:`) ? `${toId}${k.slice(fromId.length)}` : k));
+    const notified = h.blockedNotified[fromId];
+    if (notified !== undefined) {
+      h.blockedNotified[toId] = notified;
+      delete h.blockedNotified[fromId];
+    }
+  });
+}
+
+// blocked emails: one per block, not one per day
+
+function blockKey(report: HealthReport): string {
+  return report.findings.filter((f) => f.severity === 'blocked').map((f) => f.message).join('; ');
+}
+
+/**
+ * The blocked accounts not emailed about yet for this block. Accounts not in `blocked` are
+ * forgotten, so a block that comes back after it ended is emailed again.
+ */
+export function blockedNoticesDue(ctx: AppContext, blocked: HealthReport[]): HealthReport[] {
+  const ids = new Set(blocked.map((r) => accountId(r.account)));
+  const { blockedNotified } = ctx.store.section(HealthSection).read().value;
+  if (Object.keys(blockedNotified).some((id) => !ids.has(id))) {
+    ctx.store.section(HealthSection).update((h) => {
+      for (const id of Object.keys(h.blockedNotified)) if (!ids.has(id)) delete h.blockedNotified[id];
+    });
+  }
+  return blocked.filter((r) => blockedNotified[accountId(r.account)] !== blockKey(r));
+}
+
+/** The "account blocked" email for the account's current block went out. */
+export function markBlockedNotified(ctx: AppContext, account: Account): void {
+  ctx.store.section(HealthSection).update((h) => {
+    const id = accountId(account);
+    const snap = h.snapshots[id];
+    // the blocked findings never depend on today's date, so any `now` gives the same key
+    if (snap) h.blockedNotified[id] = blockKey(reportFor(account, snap, ctx.now()));
   });
 }

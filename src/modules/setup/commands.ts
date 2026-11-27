@@ -205,9 +205,10 @@ const list = defineCommand({
 const edit = defineCommand({
   name: 'edit',
   description: 'Edit an existing account',
-  async handler(_input, ctx) {
+  args: [{ name: 'account', description: 'account name, username or number (asks when left out)' }],
+  async handler({ args }, ctx) {
     await unlockStore(ctx.store);
-    const existing = await pickAccount(ctx, 'edit');
+    const existing = args[0] ? findAccount(ctx, args[0]) : await pickAccount(ctx, 'edit');
     if (!existing) return;
     console.log(chalk.dim(`\n  Editing: ${existing.name} (${existing.boid}). Press Enter to keep a value.\n`));
     const dps = await fetchDps(ctx);

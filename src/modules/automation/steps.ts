@@ -1,8 +1,8 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { log, pacedMap } from '../../platform/terminal/public.js';
 import { ApplyBusyError, autoApply } from '../apply/public.js';
-import { accountRef } from '../accounts/public.js';
-import { cachedReports, runDoctor, type HealthReport } from '../health/public.js';
+import { accountId, listAccounts } from '../accounts/public.js';
+import { blockedActions, blockedNoticesDue, cachedReports, markBlockedNotified, runDoctor, type HealthReport } from '../health/public.js';
 import { passwordChangeUnblocks, rotatePassword, rotationReason } from '../password/public.js';
 import { sendRenewalReminders } from '../renewal/public.js';
 import { createSessionPool, type SessionPool } from '../session/public.js';
@@ -24,15 +24,33 @@ export interface AutomationStep {
   run(ctx: AppContext, bag: RunBag): Promise<void>;
 }
 
-/**
- * Why the daily job makes no login with this account, and what the person does. The account
- * stays held until a command the person runs (`ipo fix`, or `ipo doctor`) checks it again.
- */
+const UNTIL_CHECKED =
+  'It stays held until you check it again with "ipo doctor" (or "ipo fix"); a fix made on the MeroShare website is not seen until then';
+
+/** Why the daily job makes no login with this account, and what the person does about it. */
 function heldReason(report: HealthReport): string {
-  const fix = `ipo fix ${accountRef(report.account)}`;
   const why = report.findings.filter((f) => f.severity === 'blocked').map((f) => f.message).join('; ');
-  const first = report.fix && report.fix !== fix ? `${report.fix}, then ` : '';
-  return `blocked: ${why}. No login until it is fixed: ${first}run "${fix}"`;
+  return `blocked: ${why}. To fix it: ${blockedActions(report).join('; ')}. ${UNTIL_CHECKED}`;
+}
+
+/** One email when an account becomes held, not one a day while it stays held. */
+async function sendHeldNotices(ctx: AppContext, held: HealthReport[]): Promise<void> {
+  for (const r of blockedNoticesDue(ctx, held)) {
+    const delivery = await ctx.notifier.send({
+      kind: 'accountBlocked',
+      account: r.account.name,
+      subject: `${r.account.name} is blocked: the daily run makes no login with it`,
+      lines: [
+        `${r.account.name}: ${r.findings.filter((f) => f.severity === 'blocked').map((f) => f.message).join('; ')}.`,
+        '',
+        `To fix it: ${blockedActions(r).join('; ')}.`,
+        '',
+        `The daily run makes no login with this account and applies for no IPO with it. ${UNTIL_CHECKED}.`,
+        'This email is sent once for this block.',
+      ],
+    });
+    if (delivery.email !== 'failed') markBlockedNotified(ctx, r.account);
+  }
 }
 
 /**
@@ -48,15 +66,31 @@ export const healthStep: AutomationStep = {
   name: 'health',
   order: 10,
   async run(ctx, bag) {
-    const held = accountsToHold(cachedReports(ctx), bag.settings);
+    let cached: HealthReport[];
+    try {
+      cached = cachedReports(ctx);
+    } catch (err) {
+      // fail closed: without the last checks ipo cannot tell a blocked account from a good one
+      const reason = `ipo could not read the last health checks (${(err as Error).message}). No login with any account until "ipo doctor" runs`;
+      for (const a of listAccounts(ctx)) bag.sessions.hold(a, reason);
+      bag.lines.push(`health: ${reason}. Every login step, apply included, is skipped in this run.`);
+      return;
+    }
+    const held = accountsToHold(cached, bag.settings);
     for (const r of held) bag.sessions.hold(r.account, heldReason(r));
-    bag.reports = await runDoctor(ctx, bag.sessions);
-    const bad = bag.reports.filter((r) => r.status !== 'ok');
+    const reports = await runDoctor(ctx, bag.sessions);
+    bag.reports = reports;
+    // a held account's report is its last check, not a new one: count each account once
+    const heldIds = new Set(held.map((r) => accountId(r.account)));
+    const checked = reports.filter((r) => !heldIds.has(accountId(r.account)));
+    const bad = checked.filter((r) => r.status !== 'ok');
     bag.lines.push(
-      `health: ${bag.reports.length - held.length} account(s) checked, ${bad.length} need attention` +
-        (held.length ? `, ${held.length} blocked and not logged in` : ''),
+      `health: ${checked.length} account(s) checked, ${bad.length} need attention` + (held.length ? `, ${held.length} blocked and not logged in` : ''),
     );
     for (const r of held) bag.lines.push(`health: skipped ${r.account.name}: ${heldReason(r)}`);
+    // the accounts this check leaves held from the next run on, the ones held now included:
+    // the email goes out on the run that finds the block, once
+    await sendHeldNotices(ctx, accountsToHold(reports, bag.settings));
   },
 };
 

@@ -78,11 +78,11 @@ Each socket's README (`src/platform/<name>/README.md`) has the details.
 ## Data flow: the daily run (`ipo auto run`, the scheduler)
 
 1. `runDaily` makes one session pool for the run; the steps run by `order` (health, password, renewal warnings, apply).
-2. Health: every account whose last saved check is `blocked` is held in the pool, with no login, unless `autoPassword` is on and a password change fixes the whole block (`passwordChangeUnblocks`). Then `runDoctor` logs in to the rest, once each, and saves their checks. A held account keeps its saved check.
+2. Health: every account whose last saved check is `blocked` is held in the pool, with no login, unless `autoPassword` is on and a password change fixes the whole block (`passwordChangeUnblocks`). Blocked includes MeroShare saying the stored password is wrong (a 401, no pending password); a network error or an outage is not a block. Then `runDoctor` logs in to the rest, once each, and saves their checks. A held account keeps its saved check; nothing is saved for it. Each held account gets a line with what to do for each finding (`ipo fix <account>`, `ipo init edit <account>` then `ipo fix <account>`, or the MeroShare website then `ipo doctor`). One `accountBlocked` email goes out on the run that finds a block, once per block (the health section records it). If the saved checks cannot be read, every account is held and the run logs in with none.
 3. Password (when `autoPassword` is on): changes each due password on the pool's session. A held account gets a "skipped" line.
 4. Renewal warnings: from the cache, no login.
-5. Apply: `autoApply` under the `apply` run lock, on the pool's sessions. A held or blocked account is skipped with the reason and `ipo fix <account>`; the results email lists it.
-6. The hold ends when the person's own command (`ipo fix`, `ipo doctor`, `ipo apply`) checks the account again and it is no longer blocked.
+5. Apply: `autoApply` under the `apply` run lock, on the pool's sessions. A held or blocked account is skipped with the reason and the action. The results email goes out only when something was applied, and then lists it too.
+6. The hold ends when the person's own command (`ipo fix`, `ipo doctor`, `ipo apply`) checks the account again and it is no longer blocked. A fix made on the MeroShare website is not seen until then.
 
 ## Adding a module
 

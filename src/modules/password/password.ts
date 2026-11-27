@@ -2,7 +2,7 @@ import type { AppContext } from '../../platform/context/public.js';
 import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public.js';
 import { generatePassword, type PasswordPolicy } from '../../platform/terminal/public.js';
 import { accountId, clearPendingPassword, promotePendingPassword, setPendingPassword } from '../accounts/public.js';
-import { daysLeft, markPasswordChanged, markPasswordUnconfirmed, type HealthReport } from '../health/public.js';
+import { daysLeft, markBlockedNotified, markPasswordChanged, markPasswordUnconfirmed, type HealthReport } from '../health/public.js';
 import { loginWithPassword, type Session } from '../session/public.js';
 import { ChangePasswordEndpoint, PasswordPolicyEndpoint } from './endpoints.js';
 import { checkPassword, parsePolicy } from './policy.js';
@@ -84,12 +84,17 @@ async function confirmChange(ctx: AppContext, session: Session, newPassword: str
     } catch (err2) {
       if (!refused(err2)) return { status: 'unknown', message: `${kept} (${friendlyMessage(err2)})` };
       const message = markPasswordUnconfirmed(ctx, session.account);
-      await ctx.notifier.send({
+      const delivery = await ctx.notifier.send({
         kind: 'accountBlocked',
         account: session.account.name,
         subject: `${session.account.name}: MeroShare password needs a check`,
-        lines: [`${session.account.name}: ${message}.`, 'ipo makes no more attempts with this account until it is fixed.'],
+        lines: [
+          `${session.account.name}: ${message}.`,
+          `The daily run makes no login with this account until you check it again with "ipo fix ${session.account.name}" or "ipo doctor".`,
+        ],
       });
+      // the daily run's blocked email would say the same thing: this one counts for this block
+      if (delivery.email !== 'failed') markBlockedNotified(ctx, session.account);
       return { status: 'blocked', message };
     }
   }

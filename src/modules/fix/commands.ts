@@ -5,7 +5,7 @@ import { defineCommand } from '../../platform/command/public.js';
 import { friendlyMessage } from '../../platform/meroshare/public.js';
 import { createSpinner, generatePassword, log, typedYes, unlockStore } from '../../platform/terminal/public.js';
 import { accountId, accountRef, findAccount, type Account } from '../accounts/public.js';
-import { cachedReports, checkSession, recordHealth, type HealthReport } from '../health/public.js';
+import { blockedActions, cachedReports, checkSession, recordHealth, type HealthReport } from '../health/public.js';
 import { canChangePassword, changePassword, checkPassword, describePolicy, getPolicy } from '../password/public.js';
 import { chargeLines, listPartners, maxYears, paymentTypeLabel, renewalDetails, startPayment } from '../renewal/public.js';
 import { closeSession, openSession, type Session } from '../session/public.js';
@@ -117,7 +117,14 @@ export const fixCommand = defineCommand({
       recordHealth(ctx, [report]);
       const cached = cachedReports(ctx).find((r) => accountId(r.account) === accountId(account));
       const kinds = fixesFor(session, cached ?? report);
-      if (!kinds.length) return log.success(`${account.name}: nothing to fix.`);
+      if (!kinds.length) {
+        // blocked by something ipo cannot fix (no bank, Role Not Authorized): say what to do instead
+        const actions = blockedActions(report);
+        if (!actions.length) return log.success(`${account.name}: nothing to fix.`);
+        for (const f of report.findings) if (f.severity === 'blocked') log.warn(f.message);
+        log.info(`ipo cannot fix this. To fix it: ${actions.join('; ')}.`);
+        return log.dim('Until a check finds it fixed, the daily run makes no login with this account.');
+      }
       for (const f of report.findings) if (f.severity !== 'ok') log.warn(f.message);
       const kind = kinds.length === 1 ? kinds[0] : await select({ message: 'Fix which?', choices: kinds.map((k) => ({ name: k, value: k })) });
       if (kind === 'pin') explainPin(account);

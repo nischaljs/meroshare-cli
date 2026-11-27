@@ -17,12 +17,14 @@ export const SnapshotSchema = z.object({
 });
 export type HealthSnapshot = z.infer<typeof SnapshotSchema>;
 
-/** The `health` section: the last check per account (keyed by account id) and the reminders already sent. */
+/** The `health` section: the last check per account (keyed by account id), the reminders and the blocked emails already sent. */
 export const HealthSection = defineSection('health', () =>
   z
     .object({
       snapshots: z.record(z.string(), SnapshotSchema).default({}),
       remindersSent: z.array(z.string()).default([]),
+      /** Per account id: the block an "account blocked" email was sent for, so it goes once per block. */
+      blockedNotified: z.record(z.string(), z.string()).default({}),
     })
     .prefault({}),
 );

@@ -16,6 +16,8 @@ export interface TestApp {
   printed: string[];
   /** Moves the test clock. */
   setNow(d: Date): void;
+  /** Writes a value the section's schema refuses straight into the config file. */
+  breakSection(name: string, value: unknown): void;
   close(): Promise<void>;
 }
 
@@ -75,6 +77,11 @@ export async function startApp(opts: FakeOptions & { now?: Date; email?: boolean
     emails,
     printed,
     setNow: (d) => (now = d),
+    breakSection: (name, value) => {
+      const doc = JSON.parse(fs.readFileSync(ctx.store.path, 'utf8'));
+      doc[name] = value;
+      fs.writeFileSync(ctx.store.path, JSON.stringify(doc));
+    },
     close: async () => {
       await fake.close();
       fs.rmSync(home, { recursive: true, force: true });

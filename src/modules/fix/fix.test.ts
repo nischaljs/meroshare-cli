@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fixesFor } from './public.js';
+import { fixCommand, fixesFor } from './public.js';
 import { openSession } from '../session/public.js';
 import { listAccounts } from '../accounts/public.js';
 import { runDoctor, cachedReports } from '../health/public.js';
@@ -27,4 +27,20 @@ test('fixes come from the flags and the last check, PIN first', async () => {
   } finally {
     await app.close();
   }
+});
+
+test('a block ipo cannot fix (no bank): ipo fix says what to do, not "nothing to fix"', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'a', password: 'p', name: 'Ram', banks: [] }], now: NOW });
+  const out: string[] = [];
+  const original = console.log;
+  console.log = (...parts: unknown[]) => void out.push(parts.join(' '));
+  try {
+    await fixCommand.handler!({ args: ['Ram'], options: {} } as never, app.ctx);
+  } finally {
+    console.log = original;
+    await app.close();
+  }
+  const text = out.join('\n');
+  assert.ok(!text.includes('nothing to fix'), text);
+  assert.ok(text.includes('link a bank account on the MeroShare website, then run "ipo doctor"'), text);
 });
