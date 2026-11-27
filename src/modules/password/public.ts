@@ -4,6 +4,7 @@ export {
   rotatePassword,
   rotationReason,
   canChangePassword,
+  passwordChangeUnblocks,
   PasswordChangeBlockedError,
   ROTATE_WITHIN_DAYS,
   type ChangeOutcome,

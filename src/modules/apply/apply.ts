@@ -52,7 +52,8 @@ export async function planApply(ctx: AppContext, accounts: Account[] = listAccou
   for (const o of outcomes) {
     if (!o.ok) {
       skipped.push({ account: o.account, reason: o.error });
-      reports.push(loginFailedReport(ctx, o.account, o.error));
+      // a held account made no login, so there is nothing new to save about it
+      if (!o.held) reports.push(loginFailedReport(ctx, o.account, o.error));
       continue;
     }
     // a blocked session makes no call here; a healthy one reads its details (and refreshes the cache)

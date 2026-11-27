@@ -34,7 +34,8 @@ test/                 the fake MeroShare server, the app harness, cross-cutting 
 | `command` | CLI commands | `defineCommand({ name, description, args, options, subcommands, handler })`, listed in `src/cli/commands.ts`. |
 | automation (in `modules/automation`) | daily steps | `{ name, order, run(ctx, bag) }` in `DAILY_STEPS`. A failing step is logged and the next one runs. |
 | `notify` | notices | `ctx.notifier.send(notice)` with a typed notice kind. The socket prints it and emails it when email is set up and that kind is on. |
-| `scheduler`, `terminal` | — | cron, and screen output, pacing, random passwords, opening a URL. |
+| `scheduler` | — | cron, `auto.pid`, and the run lock: `acquireRunLock(home, name)` (`runlock.ts`) lets one long job run at a time across processes; `apply` holds it, a second run gets `RunBusyError`. |
+| `terminal` | — | screen output, pacing, random passwords, opening a URL. |
 | `context` | — | builds `AppContext` (store, MeroShare client, notifier, clock, sleep, account gap) once per command. |
 
 Each socket's README (`src/platform/<name>/README.md`) has the details.
@@ -44,15 +45,15 @@ Each socket's README (`src/platform/<name>/README.md`) has the details.
 | Module | Owns |
 |---|---|
 | `accounts` | the `accounts` section, finding an account, the pending password |
-| `session` | login, the login flags, which flags block an account |
-| `health` | `ipo doctor`, expiry dates, PIN and bank state, the cached snapshot and the 30-day banner, renewal reminder dedupe |
+| `session` | login, the login flags, which flags block an account, the run's session pool (one login per account per run, `hold`) |
+| `health` | `ipo doctor`, expiry dates, PIN and bank state, the cached snapshot and the 30-day banner, renewal reminder dedupe, `moveHealth` (the snapshot and sent reminders follow an account whose username or DP changes) |
 | `password` | the two-phase password change and the auto-rotation rule |
 | `renewal` | renewal charges, the payment page, the reminder emails |
 | `fix` | `ipo fix <account>`: picks and runs one fix |
 | `issues` | the open issue list, `hasActed`, category match |
-| `apply` | `ipo apply` and auto-apply |
+| `apply` | `ipo apply` and auto-apply, one apply run at a time (`lockApply`, on the scheduler's run lock) |
 | `results` | `ipo result` |
-| `automation` | `ipo auto` and the daily step list |
+| `automation` | `ipo auto`, the daily step list, which blocked accounts the daily job holds |
 | `notifications` | `ipo notify`, the email wizard |
 | `setup` | `ipo init`, `ipo accounts` |
 
@@ -67,12 +68,21 @@ Each socket's README (`src/platform/<name>/README.md`) has the details.
 ## Data flow: `ipo apply`
 
 1. `bin/cli.ts` → `buildProgram(COMMANDS)`; commander calls `applyCommand.handler`.
-2. The handler gets `AppContext` from the `context` socket and unlocks the store with the master password.
+2. The handler gets `AppContext` from the `context` socket and unlocks the store with the master password. `lockApply` takes the `apply` run lock; another live apply run makes this one stop with "Another ipo apply is running".
 3. `accounts.listAccounts` reads the `accounts` section (secrets decrypted by the store).
 4. For each account `session.openSession` logs in through the `meroshare` socket. Blocking flags or a 401 Role Not Authorized make the session blocked; `health` caches what it learned.
-5. The first healthy account's session reads the issue list (`issues`). Blocked accounts are skipped with a line that points to `ipo doctor`.
+5. The first healthy account's session reads the issue list (`issues`). Blocked accounts are skipped with the reason and the fix (`ipo fix <account>`).
 6. For each healthy account `apply` re-reads that account's issue list, skips an issue whose `action` is set, and sends the apply write once (no retry).
 7. Each result is a notice (`ctx.notifier.send`); the notify socket prints it and emails it if email is on.
+
+## Data flow: the daily run (`ipo auto run`, the scheduler)
+
+1. `runDaily` makes one session pool for the run; the steps run by `order` (health, password, renewal warnings, apply).
+2. Health: every account whose last saved check is `blocked` is held in the pool, with no login, unless `autoPassword` is on and a password change fixes the whole block (`passwordChangeUnblocks`). Then `runDoctor` logs in to the rest, once each, and saves their checks. A held account keeps its saved check.
+3. Password (when `autoPassword` is on): changes each due password on the pool's session. A held account gets a "skipped" line.
+4. Renewal warnings: from the cache, no login.
+5. Apply: `autoApply` under the `apply` run lock, on the pool's sessions. A held or blocked account is skipped with the reason and `ipo fix <account>`; the results email lists it.
+6. The hold ends when the person's own command (`ipo fix`, `ipo doctor`, `ipo apply`) checks the account again and it is no longer blocked.
 
 ## Adding a module
 

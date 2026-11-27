@@ -107,7 +107,7 @@ export async function closeSession(ctx: AppContext, session: Session): Promise<v
 
 export type SessionOutcome =
   | { account: Account; ok: true; session: Session }
-  | { account: Account; ok: false; error: string };
+  | { account: Account; ok: false; error: string; held?: true };
 
 /** Opens sessions for many accounts, two at a time with a gap between starts. Never throws. */
 export async function openSessions(ctx: AppContext, accounts: Account[]): Promise<SessionOutcome[]> {
@@ -134,6 +134,11 @@ export interface SessionPool {
   replace(session: Session): Promise<void>;
   /** Later steps skip the account with this reason. */
   fail(account: Account, error: string): Promise<void>;
+  /**
+   * Before any login: the account is not logged in this run. `get` gives a failure with
+   * `held: true`, so a step skips it and keeps the saved health check as it is.
+   */
+  hold(account: Account, reason: string): void;
   /** Logs out every open session. */
   closeAll(): Promise<void>;
 }
@@ -175,6 +180,11 @@ export function createSessionPool(ctx: AppContext): SessionPool {
       const prev = await outcomes.get(id);
       if (prev?.ok) replaced.push(prev.session);
       outcomes.set(id, Promise.resolve({ account, ok: false as const, error }));
+    },
+    hold(account, reason) {
+      const id = accountId(account);
+      if (outcomes.has(id)) throw new Error(`${account.name}: already logged in this run; hold it before any login`);
+      outcomes.set(id, Promise.resolve({ account, ok: false as const, error: reason, held: true as const }));
     },
     async closeAll() {
       const all = await Promise.all(outcomes.values());

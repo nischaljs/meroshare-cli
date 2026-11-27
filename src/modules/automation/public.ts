@@ -6,6 +6,7 @@ export {
   passwordStep,
   renewalWarningsStep,
   applyStep,
+  accountsToHold,
   type AutomationStep,
   type RunBag,
 } from './steps.js';

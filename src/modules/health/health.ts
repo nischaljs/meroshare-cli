@@ -190,18 +190,30 @@ export function markPasswordChanged(ctx: AppContext, account: Account): void {
   });
 }
 
-/** Logs in to every account (paced), checks it, saves the snapshots. Read only on MeroShare. */
 /**
  * Checks every account and saves the snapshots. Read only. With a pool (the daily job),
  * the logins stay open in it for the later steps; without one, they are closed here.
+ * An account the pool holds makes no login: its cached report is returned and not saved again.
  */
 export async function runDoctor(ctx: AppContext, pool?: SessionPool): Promise<HealthReport[]> {
   const own = pool ?? createSessionPool(ctx);
   try {
     const outcomes = await own.getMany(listAccounts(ctx));
+    const cached = new Map(cachedReports(ctx).map((r) => [accountId(r.account), r]));
+    const fresh: HealthReport[] = [];
     const reports: HealthReport[] = [];
-    for (const o of outcomes) reports.push(o.ok ? await checkSession(ctx, o.session) : loginFailedReport(ctx, o.account, o.error));
-    recordHealth(ctx, reports);
+    for (const o of outcomes) {
+      // a held account made no login: its last check stands, unchanged
+      const held = !o.ok && o.held ? cached.get(accountId(o.account)) : undefined;
+      if (held) {
+        reports.push(held);
+        continue;
+      }
+      const r = o.ok ? await checkSession(ctx, o.session) : loginFailedReport(ctx, o.account, o.error);
+      fresh.push(r);
+      reports.push(r);
+    }
+    recordHealth(ctx, fresh);
     return reports;
   } finally {
     if (!pool) await own.closeAll();

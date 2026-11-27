@@ -1,8 +1,9 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { log, pacedMap } from '../../platform/terminal/public.js';
 import { ApplyBusyError, autoApply } from '../apply/public.js';
-import { runDoctor, type HealthReport } from '../health/public.js';
-import { rotatePassword, rotationReason } from '../password/public.js';
+import { accountRef } from '../accounts/public.js';
+import { cachedReports, runDoctor, type HealthReport } from '../health/public.js';
+import { passwordChangeUnblocks, rotatePassword, rotationReason } from '../password/public.js';
 import { sendRenewalReminders } from '../renewal/public.js';
 import { createSessionPool, type SessionPool } from '../session/public.js';
 import type { AutoSettings } from './state.js';
@@ -23,13 +24,39 @@ export interface AutomationStep {
   run(ctx: AppContext, bag: RunBag): Promise<void>;
 }
 
+/**
+ * Why the daily job makes no login with this account, and what the person does. The account
+ * stays held until a command the person runs (`ipo fix`, or `ipo doctor`) checks it again.
+ */
+function heldReason(report: HealthReport): string {
+  const fix = `ipo fix ${accountRef(report.account)}`;
+  const why = report.findings.filter((f) => f.severity === 'blocked').map((f) => f.message).join('; ');
+  const first = report.fix && report.fix !== fix ? `${report.fix}, then ` : '';
+  return `blocked: ${why}. No login until it is fixed: ${first}run "${fix}"`;
+}
+
+/**
+ * An account the last check found blocked is held: no step logs in with it, so a dead
+ * password is not tried again every day. The one exception is a block the automatic
+ * password change fixes (an expired password, MeroShare asks for a new one) while it is on.
+ */
+export function accountsToHold(reports: HealthReport[], settings: AutoSettings): HealthReport[] {
+  return reports.filter((r) => r.status === 'blocked' && !(settings.autoPassword && passwordChangeUnblocks(r)));
+}
+
 export const healthStep: AutomationStep = {
   name: 'health',
   order: 10,
   async run(ctx, bag) {
+    const held = accountsToHold(cachedReports(ctx), bag.settings);
+    for (const r of held) bag.sessions.hold(r.account, heldReason(r));
     bag.reports = await runDoctor(ctx, bag.sessions);
     const bad = bag.reports.filter((r) => r.status !== 'ok');
-    bag.lines.push(`health: ${bag.reports.length} account(s) checked, ${bad.length} need attention`);
+    bag.lines.push(
+      `health: ${bag.reports.length - held.length} account(s) checked, ${bad.length} need attention` +
+        (held.length ? `, ${held.length} blocked and not logged in` : ''),
+    );
+    for (const r of held) bag.lines.push(`health: skipped ${r.account.name}: ${heldReason(r)}`);
   },
 };
 
@@ -44,7 +71,7 @@ export const passwordStep: AutomationStep = {
     await pacedMap(due, { concurrency: 1, gapMs: ctx.accountGapMs, sleep: ctx.sleep }, async ({ report, reason }) => {
       const o = await bag.sessions.get(report.account);
       if (!o.ok) {
-        bag.lines.push(`password: ${report.account.name}: could not log in (${o.error})`);
+        bag.lines.push(o.held ? `password: skipped ${report.account.name}: ${o.error}` : `password: ${report.account.name}: could not log in (${o.error})`);
         return;
       }
       try {

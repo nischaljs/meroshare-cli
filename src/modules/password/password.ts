@@ -107,6 +107,17 @@ async function confirmChange(ctx: AppContext, session: Session, newPassword: str
   return { status: 'changed', session: { ...proved, account: promoted } };
 }
 
+/**
+ * True when a password change is the fix for everything that blocks the account in this
+ * report (an expired password, or MeroShare asks for a new one), so the automatic change
+ * may log in and run. False for a refusal, a password ipo could not confirm, a renewal,
+ * the PIN or no bank: those need the person.
+ */
+export function passwordChangeUnblocks(report: HealthReport): boolean {
+  const blocking = report.findings.filter((f) => f.severity === 'blocked');
+  return blocking.length > 0 && blocking.every((f) => f.kind === 'flag' && f.fix === 'password');
+}
+
 /** Why the password should change now, or null. */
 export function rotationReason(report: HealthReport, now: Date): string | null {
   const f = report.snapshot.flags;
