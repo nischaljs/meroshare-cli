@@ -1,7 +1,10 @@
 {
   "name": "nepse-ipo",
   "version": "1.0.0",
-  "description": "Bulk MeroShare IPO CLI tool for Nepal Stock Exchange",
+  "description": "Apply for NEPSE IPOs from every family MeroShare account with one command. Runs only on your computer: passwords stay encrypted on your device and go to MeroShare only.",
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "bin": {
     "ipo": "./bin/ipo.js"

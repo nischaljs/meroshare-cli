@@ -2,13 +2,27 @@
 
 # meroshare-cli
 
-Apply for an IPO on MeroShare for every account in your family, with one command: `ipo`.
+Apply for an IPO on MeroShare for every account in your family, with one command: `ipo`. Everything stays on your own computer. Your passwords go to MeroShare and nowhere else.
 
 ![The ipo command in a terminal: ipo doctor finds one account blocked by an expired password and one whose DEMAT expires in 9 days, ipo fix changes the expired password after a typed yes, and ipo apply applies from all three accounts.](https://raw.githubusercontent.com/nischaljs/nepse-ipo/HEAD/docs/media/demo.gif)
 
 [![npm version](https://img.shields.io/npm/v/meroshare-cli)](https://www.npmjs.com/package/meroshare-cli)
 [![license: MIT](https://img.shields.io/npm/l/meroshare-cli)](#license)
 [![node](https://img.shields.io/node/v/meroshare-cli)](https://nodejs.org/)
+
+## Your data stays with you
+
+This is the first thing to know, so it comes first.
+
+- **It runs only on your computer.** There is no ipo website, no ipo server and no ipo account. Nobody, including the person who wrote it, can see your accounts.
+- **Your passwords, CRN and PIN are locked on your computer.** They are encrypted with a master password that only you know. It is never stored or sent anywhere.
+- **It talks only to MeroShare.** The only addresses in the code are CDSC's own: `meroshare.cdsc.com.np`, `webbackend.cdsc.com.np` (the MeroShare website uses it too) and `iporesult.cdsc.com.np` (results).
+- **Email is yours, and optional.** If you turn on alerts, they go from your own email account to you. Nothing is copied to anyone else.
+- **Payment happens in your browser.** For a renewal, ipo opens MeroShare's payment page and you pay there yourself. ipo never sees your eSewa, Khalti or bank details.
+- **No tracking, no analytics, no data collection.** Not even a count of how many people use it.
+- **You can check all of this.** The code is open. Run `grep -rn "https://" src` in this repository to see every address it can reach.
+
+How the file is locked, and what happens if you forget the master password: [Your data and safety](#your-data-and-safety).
 
 ## Why
 
@@ -92,7 +106,7 @@ Every day (10:00 by default) it does four things, in this order:
 
 `ipo` ले परिवारका सबै MeroShare खाताबाट एउटै command मा IPO भरिदिन्छ। पासवर्ड वा DEMAT को म्याद सकिन लाग्यो भने पहिल्यै भनिदिन्छ, त्यसैले खाता अचानक बन्द हुँदैन।
 
-तपाईंका पासवर्ड र PIN तपाईंकै कम्प्युटरमा, ताल्चा लगाएर (encrypt गरेर) राखिन्छन्। MeroShare बाहेक अरू कतै पठाइँदैन।
+**सबै कुरा तपाईंकै कम्प्युटरमा रहन्छ।** तपाईंका पासवर्ड, CRN र PIN तपाईंकै कम्प्युटरमा ताल्चा लगाएर (encrypt गरेर) राखिन्छन्, र ताल्चाको चाबी तपाईंको master password मात्र हो। यी कुरा MeroShare बाहेक अरू कसैलाई पठाइँदैन। हाम्रो कुनै server छैन, कुनै tracking छैन, यो tool बनाउनेले पनि तपाईंको खाता देख्न सक्दैन।
 
 यसरी सुरु गर्नुहोस् (पहिले [Node.js](https://nodejs.org/) राख्नुहोस्):
 
