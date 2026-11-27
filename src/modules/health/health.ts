@@ -1,8 +1,7 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public.js';
-import { pacedMap } from '../../platform/terminal/public.js';
 import { accountId, accountRef, getBanks, listAccounts, type Account } from '../accounts/public.js';
-import { closeSession, noFlags, openSession, type LoginFlags, type Session } from '../session/public.js';
+import { createSessionPool, noFlags, type LoginFlags, type Session, type SessionPool } from '../session/public.js';
 import { daysLeft, firstDay } from './dates.js';
 import { OwnDetailEndpoint } from './endpoints.js';
 import { HealthSection, type HealthSnapshot } from './state.js';
@@ -33,6 +32,7 @@ const KIND_FIX: Record<ExpiryKind, Finding['fix']> = { password: 'password', mer
 
 export const WARN_DAYS = 30;
 const ROLE_REFUSED = 'MeroShare refused the account (Role Not Authorized)';
+const PASSWORD_UNCONFIRMED = 'Neither the old nor the new password works after a password change';
 export const URGENT_DAYS = 7;
 
 function worst(findings: Finding[]): Severity {
@@ -81,6 +81,7 @@ function fixText(account: Account, findings: Finding[]): string | null {
 export function findingsFor(snapshot: HealthSnapshot, now: Date): Finding[] {
   const out: Finding[] = [];
   if (snapshot.error?.startsWith(ROLE_REFUSED)) out.push({ kind: 'login', severity: 'blocked', message: snapshot.error, fix: null });
+  else if (snapshot.error?.startsWith(PASSWORD_UNCONFIRMED)) out.push({ kind: 'login', severity: 'blocked', message: snapshot.error, fix: 'login' });
   else if (snapshot.error) out.push({ kind: 'login', severity: 'error', message: snapshot.error, fix: 'login' });
   out.push(...flagFindings(snapshot.flags));
   for (const [kind, day] of [
@@ -165,6 +166,20 @@ export function recordHealth(ctx: AppContext, reports: HealthReport[]): void {
   });
 }
 
+/**
+ * After a change MeroShare said yes to, when neither password logs in: the account is
+ * blocked until a person checks which password works. Returns the message.
+ */
+export function markPasswordUnconfirmed(ctx: AppContext, account: Account): string {
+  const message = `${PASSWORD_UNCONFIRMED}. ipo keeps both. Log in on the MeroShare site to see which one works, then store it with "ipo init edit"`;
+  const now = ctx.now();
+  ctx.store.section(HealthSection).update((h) => {
+    const prev = h.snapshots[accountId(account)];
+    h.snapshots[accountId(account)] = { ...(prev ?? baseSnapshot(account, now)), checkedAt: now.toISOString(), error: message };
+  });
+  return message;
+}
+
 /** After a password change: the old expiry and the password flags no longer hold. */
 export function markPasswordChanged(ctx: AppContext, account: Account): void {
   ctx.store.section(HealthSection).update((h) => {
@@ -176,23 +191,21 @@ export function markPasswordChanged(ctx: AppContext, account: Account): void {
 }
 
 /** Logs in to every account (paced), checks it, saves the snapshots. Read only on MeroShare. */
-export async function runDoctor(ctx: AppContext): Promise<HealthReport[]> {
-  const accounts = listAccounts(ctx);
-  const reports = await pacedMap(accounts, { concurrency: 2, gapMs: ctx.accountGapMs, sleep: ctx.sleep }, async (account) => {
-    let session: Session;
-    try {
-      session = await openSession(ctx, account);
-    } catch (err) {
-      return loginFailedReport(ctx, account, err instanceof Error ? err.message : String(err));
-    }
-    try {
-      return await checkSession(ctx, session);
-    } finally {
-      await closeSession(ctx, session);
-    }
-  });
-  recordHealth(ctx, reports);
-  return reports;
+/**
+ * Checks every account and saves the snapshots. Read only. With a pool (the daily job),
+ * the logins stay open in it for the later steps; without one, they are closed here.
+ */
+export async function runDoctor(ctx: AppContext, pool?: SessionPool): Promise<HealthReport[]> {
+  const own = pool ?? createSessionPool(ctx);
+  try {
+    const outcomes = await own.getMany(listAccounts(ctx));
+    const reports: HealthReport[] = [];
+    for (const o of outcomes) reports.push(o.ok ? await checkSession(ctx, o.session) : loginFailedReport(ctx, o.account, o.error));
+    recordHealth(ctx, reports);
+    return reports;
+  } finally {
+    if (!pool) await own.closeAll();
+  }
 }
 
 export function cachedReports(ctx: AppContext): HealthReport[] {

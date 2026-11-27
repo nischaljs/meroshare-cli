@@ -10,12 +10,18 @@ import type { FakeUser } from '../../../test/fake-meroshare/server.js';
 const NOW = new Date(2026, 10, 27, 10);
 const u = (over: Partial<FakeUser> = {}): FakeUser => ({ dpId: 1, username: 'u1', password: 'old-Pass1!', name: 'Ram', ...over });
 const changes = (app: Awaited<ReturnType<typeof startApp>>) => app.fake.count('POST', '/meroShare/changePassword/');
+const logins = (app: Awaited<ReturnType<typeof startApp>>, username: string) =>
+  app.fake.requests.filter((r) => r.path === '/meroShare/auth/' && (r.body as { username?: string })?.username === username).length;
 
 test('change success: the new password is stored, pending cleared, a notice sent', async () => {
   const app = await startApp({ users: [u({ flags: { passwordExpired: true } })], email: true });
   try {
     const s = await openSession(app.ctx, listAccounts(app.ctx)[0]);
-    assert.deepEqual(await changePassword(app.ctx, s, 'New-Pass2!'), { status: 'changed' });
+    const out = await changePassword(app.ctx, s, 'New-Pass2!');
+    assert.equal(out.status, 'changed');
+    // the new password was proved with one login, and that session is handed back
+    assert.equal(logins(app, 'u1'), 2);
+    assert.equal(out.status === 'changed' && out.session.account.password, 'New-Pass2!');
     const a = listAccounts(app.ctx)[0];
     assert.equal(a.password, 'New-Pass2!');
     assert.equal(a.pendingPassword, '');
@@ -119,4 +125,44 @@ test('policy: read by key names, fallback when absent; check names the gaps', ()
   assert.ok(checkPassword(p, 'short').length > 0);
   assert.deepEqual(checkPassword(p, 'Good-Pass1'), []);
   assert.ok(checkPassword(p, 'Good-Pass1', 'Good-Pass1').length > 0);
+});
+
+test('a 2xx that changed nothing: the new password is refused, the old one works, pending is dropped', async () => {
+  const app = await startApp({ users: [u({ changePassword: 'ignore' })], email: true });
+  try {
+    const s = await openSession(app.ctx, listAccounts(app.ctx)[0]);
+    const out = await changePassword(app.ctx, s, 'New-Pass2!');
+    assert.equal(out.status, 'rejected');
+    assert.equal(out.status === 'rejected' && out.message, 'MeroShare did not accept the new password');
+    assert.ok(out.status === 'rejected' && out.session);
+    const a = listAccounts(app.ctx)[0];
+    assert.equal(a.password, 'old-Pass1!');
+    assert.equal(a.pendingPassword, '');
+    assert.equal(changes(app), 1);
+    assert.equal(logins(app, 'u1'), 3); // open, new refused, old once
+    assert.equal(app.emails.length, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('a 2xx after which neither password works: both kept, account blocked, notice sent, no more tries', async () => {
+  const app = await startApp({ users: [u({ changePassword: 'lose' })], email: true });
+  try {
+    const s = await openSession(app.ctx, listAccounts(app.ctx)[0]);
+    const out = await changePassword(app.ctx, s, 'New-Pass2!');
+    assert.equal(out.status, 'blocked');
+    const a = listAccounts(app.ctx)[0];
+    assert.equal(a.password, 'old-Pass1!');
+    assert.equal(a.pendingPassword, 'New-Pass2!');
+    assert.equal(logins(app, 'u1'), 3);
+    const [r] = cachedReports(app.ctx);
+    assert.equal(r.status, 'blocked');
+    assert.match(r.snapshot.error ?? '', /Neither the old nor the new password works/);
+    assert.equal(app.emails.length, 1);
+    assert.match(app.emails[0].subject, /password needs a check/);
+    assert.ok(!app.emails[0].text.includes('New-Pass2!'));
+  } finally {
+    await app.close();
+  }
 });

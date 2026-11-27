@@ -44,6 +44,28 @@ async function loginWith(ctx: AppContext, account: Account, password: string) {
   return ctx.client.login(Login, { clientId: account.dpId, username: account.username, password });
 }
 
+function toSession(account: Account, res: Awaited<ReturnType<typeof loginWith>>, recoveredPending: boolean): Session {
+  const flags = parseFlags(res.data);
+  return {
+    account,
+    token: res.token,
+    name: typeof res.data.name === 'string' && res.data.name ? res.data.name : account.name,
+    demat: typeof res.data.demat === 'string' ? res.data.demat : account.demat,
+    flags,
+    blocked: blockingReasons(flags),
+    recoveredPending,
+  };
+}
+
+/**
+ * One login with this exact password. Writes nothing to the store and never falls back
+ * to another password. Throws the MeroShare error as it came, so the caller can tell a
+ * refusal (`isDefiniteRejection`) from no answer.
+ */
+export async function loginWithPassword(ctx: AppContext, account: Account, password: string): Promise<Session> {
+  return toSession(account, await loginWith(ctx, account, password), false);
+}
+
 /**
  * Logs in. When the stored password is refused and a pending password exists
  * (a change whose answer never arrived), tries the pending one and keeps it on success.
@@ -66,16 +88,7 @@ export async function openSession(ctx: AppContext, account: Account): Promise<Se
     current = promotePendingPassword(ctx, accountId(account), account.pendingPassword);
     recoveredPending = true;
   }
-  const flags = parseFlags(res.data);
-  return {
-    account: current,
-    token: res.token,
-    name: typeof res.data.name === 'string' && res.data.name ? res.data.name : account.name,
-    demat: typeof res.data.demat === 'string' ? res.data.demat : account.demat,
-    flags,
-    blocked: blockingReasons(flags),
-    recoveredPending,
-  };
+  return toSession(current, res, recoveredPending);
 }
 
 /** Throws AccountBlockedError when a flag stops the account. */
@@ -105,4 +118,70 @@ export async function openSessions(ctx: AppContext, accounts: Account[]): Promis
       return { account, ok: false as const, error: err instanceof Error ? err.message : String(err) };
     }
   });
+}
+
+/**
+ * The sessions of one run (the daily job): each account logs in at most once, in the
+ * first step that needs it, and later steps reuse that session. A failed login is kept
+ * too, so later steps skip the account without trying again.
+ */
+export interface SessionPool {
+  /** The account's session, opened on the first call. Later calls make no login. */
+  get(account: Account): Promise<SessionOutcome>;
+  /** Like `get` for many accounts; only the ones not opened yet are paced. Never throws. */
+  getMany(accounts: Account[]): Promise<SessionOutcome[]>;
+  /** A step logged in again (a proved password change): use this session from now on. */
+  replace(session: Session): Promise<void>;
+  /** Later steps skip the account with this reason. */
+  fail(account: Account, error: string): Promise<void>;
+  /** Logs out every open session. */
+  closeAll(): Promise<void>;
+}
+
+export function createSessionPool(ctx: AppContext): SessionPool {
+  const outcomes = new Map<string, Promise<SessionOutcome>>();
+  const replaced: Session[] = [];
+
+  const open = (account: Account): Promise<SessionOutcome> =>
+    openSession(ctx, account).then(
+      (session) => ({ account, ok: true as const, session }),
+      (err) => ({ account, ok: false as const, error: err instanceof Error ? err.message : String(err) }),
+    );
+
+  const pool: SessionPool = {
+    get(account) {
+      const id = accountId(account);
+      let o = outcomes.get(id);
+      if (!o) {
+        o = open(account);
+        outcomes.set(id, o);
+      }
+      return o;
+    },
+    async getMany(accounts) {
+      const fresh = accounts.filter((a) => !outcomes.has(accountId(a)));
+      await pacedMap(fresh, { concurrency: 2, gapMs: ctx.accountGapMs, sleep: ctx.sleep }, (a) => pool.get(a));
+      return Promise.all(accounts.map((a) => pool.get(a)));
+    },
+    async replace(session) {
+      const id = accountId(session.account);
+      const prev = await outcomes.get(id);
+      // the old session is logged out at the end, with the rest
+      if (prev?.ok && prev.session !== session) replaced.push(prev.session);
+      outcomes.set(id, Promise.resolve({ account: session.account, ok: true as const, session }));
+    },
+    async fail(account, error) {
+      const id = accountId(account);
+      const prev = await outcomes.get(id);
+      if (prev?.ok) replaced.push(prev.session);
+      outcomes.set(id, Promise.resolve({ account, ok: false as const, error }));
+    },
+    async closeAll() {
+      const all = await Promise.all(outcomes.values());
+      outcomes.clear();
+      const sessions = [...replaced.splice(0), ...all.flatMap((o) => (o.ok ? [o.session] : []))];
+      for (const s of sessions) await closeSession(ctx, s);
+    },
+  };
+  return pool;
 }

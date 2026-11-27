@@ -19,8 +19,12 @@ export interface FakeUser {
   bankDetail?: Record<string, unknown>;
   /** The issues this user sees; `action` is per user. */
   issues?: Record<string, unknown>[];
-  /** How a password change answers. 'drop': the server changes it, then answers 502. */
-  changePassword?: 'ok' | 'reject' | 'drop';
+  /**
+   * How a password change answers. 'drop': the server changes it, then answers 502.
+   * 'ignore': answers 200 and changes nothing. 'lose': answers 200 and the password becomes
+   * one neither side knows.
+   */
+  changePassword?: 'ok' | 'reject' | 'drop' | 'ignore' | 'lose';
   /** The first n login requests get an HTML bot-check page. */
   challengeLogins?: number;
   /** Status every apply request gets (default 201). */
@@ -129,7 +133,8 @@ export async function startFake(opts: FakeOptions): Promise<FakeMeroShare> {
         const b = body as { oldPassword: string; newPassword: string };
         const mode = u.changePassword ?? 'ok';
         if (mode === 'reject' || b.oldPassword !== u.password) return json(400, { message: 'Password does not meet the policy' });
-        u.password = b.newPassword;
+        if (mode === 'ignore') return json(200, { message: 'Password changed successfully' });
+        u.password = mode === 'lose' ? `lost-${b.newPassword}` : b.newPassword;
         u.flags = { ...(u.flags ?? {}), passwordExpired: false, changePassword: false };
         if (mode === 'drop') return json(502, { message: 'Bad gateway' });
         return json(200, { message: 'Password changed successfully' });

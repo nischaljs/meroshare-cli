@@ -66,7 +66,8 @@ async function fixPassword(ctx: AppContext, session: Session): Promise<void> {
   const spinner = createSpinner('Changing the password...').start();
   const out = await changePassword(ctx, session, pw);
   if (out.status === 'changed') spinner.succeed(`Password changed. To see it: ipo accounts password ${accountRef(session.account)}`);
-  else if (out.status === 'rejected') spinner.fail(`MeroShare refused the change: ${out.message}. Nothing changed.`);
+  else if (out.status === 'rejected') spinner.fail(`MeroShare refused the change: ${out.message}. The old password is kept.`);
+  else if (out.status === 'blocked') spinner.fail(out.message);
   else spinner.warn(`No clear answer from MeroShare (${out.message}). The new password is kept as pending; the next login tries both. Run "ipo doctor" to settle it.`);
 }
 

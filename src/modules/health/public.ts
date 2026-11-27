@@ -4,6 +4,7 @@ export {
   loginFailedReport,
   recordHealth,
   markPasswordChanged,
+  markPasswordUnconfirmed,
   cachedReports,
   expiryBanner,
   dueReminders,
