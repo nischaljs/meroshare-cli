@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runDoctor, expiryBanner, dueReminders, markRemindersSent, findingsFor, toDay, daysLeft, cachedReports, type HealthSnapshot } from './public.js';
+import { runDoctor, expiryBanner, dueReminders, markRemindersSent, moveHealth, findingsFor, toDay, daysLeft, cachedReports, type HealthSnapshot } from './public.js';
 import { noFlags } from '../session/public.js';
+import { accountId, listAccounts, updateAccount } from '../accounts/public.js';
 import { startApp, dayFrom } from '../../../test/fake-meroshare/app.js';
 import type { FakeUser } from '../../../test/fake-meroshare/server.js';
 
@@ -113,6 +114,25 @@ test('reminders: one per threshold per expiry, the larger ones marked with it', 
     assert.deepEqual(dueReminders(app.ctx, [30, 14, 7, 3, 1]), []);
     app.setNow(new Date(2026, 11, 2, 10));
     assert.equal(dueReminders(app.ctx, [30, 14, 7, 3, 1])[0].threshold, 7);
+  } finally {
+    await app.close();
+  }
+});
+
+test('an edit that changes the username moves the snapshot and the sent reminders to the new id', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'p1', name: 'Ram', ownDetail: { ...far, expiredDate: dayFrom(NOW, 5) } }], now: NOW });
+  try {
+    await runDoctor(app.ctx);
+    const due = dueReminders(app.ctx, [30, 7]);
+    markRemindersSent(app.ctx, due.flatMap((d) => d.keys));
+    const before = listAccounts(app.ctx)[0];
+    const next = { ...before, username: 'u2' };
+    updateAccount(app.ctx, accountId(before), () => next);
+    moveHealth(app.ctx, accountId(before), accountId(next));
+    const [r] = cachedReports(app.ctx);
+    assert.equal(r.account.username, 'u2');
+    assert.equal(r.snapshot.meroshareExpiry, dayFrom(NOW, 5));
+    assert.deepEqual(dueReminders(app.ctx, [30, 7]), []); // not sent again under the new id
   } finally {
     await app.close();
   }

@@ -288,3 +288,16 @@ export function markRemindersSent(ctx: AppContext, keys: string[]): void {
     h.remindersSent = [...new Set([...h.remindersSent, ...keys])];
   });
 }
+
+/** An account's id changed (new username or DP): its snapshot and sent reminders move with it. */
+export function moveHealth(ctx: AppContext, fromId: string, toId: string): void {
+  if (fromId === toId) return;
+  ctx.store.section(HealthSection).update((h) => {
+    const snap = h.snapshots[fromId];
+    if (snap) {
+      h.snapshots[toId] = snap;
+      delete h.snapshots[fromId];
+    }
+    h.remindersSent = h.remindersSent.map((k) => (k.startsWith(`${fromId}:`) ? `${toId}${k.slice(fromId.length)}` : k));
+  });
+}

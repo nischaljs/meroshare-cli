@@ -5,6 +5,7 @@ export {
   recordHealth,
   markPasswordChanged,
   markPasswordUnconfirmed,
+  moveHealth,
   cachedReports,
   expiryBanner,
   dueReminders,

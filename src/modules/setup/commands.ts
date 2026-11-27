@@ -5,6 +5,7 @@ import { defineCommand } from '../../platform/command/public.js';
 import { friendlyMessage } from '../../platform/meroshare/public.js';
 import { createSpinner, createTable, log, typedYes, unlockStore } from '../../platform/terminal/public.js';
 import { closeSession, openSession } from '../session/public.js';
+import { moveHealth } from '../health/public.js';
 import {
   accountId,
   addAccount,
@@ -214,6 +215,8 @@ const edit = defineCommand({
     const next = await collectAccount(ctx, dps, existing);
     if (!next) return;
     updateAccount(ctx, accountId(existing), () => next);
+    // the health cache is keyed by DP and username: keep it when either changes
+    moveHealth(ctx, accountId(existing), accountId(next));
     log.success(`Account "${next.name}" updated.`);
   },
 });

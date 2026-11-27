@@ -8,5 +8,5 @@ Account health: expiry dates, PIN state, bank link, and what to fix.
 - `runDoctor(ctx, pool?)`: every account, two at a time with a gap, then saves the snapshots. Read only. With a pool (the daily job) the sessions stay open in it for later steps; without one they are closed.
 - `expiryBanner(ctx)`: one line from the cached snapshots; no login. The CLI prints it before every command.
 - Reminders: `dueReminders(ctx, thresholds)` and `markRemindersSent(ctx, keys)`. A key is `account:kind:expiry:threshold`; when a reminder goes out, every larger threshold is marked too, so each goes once and a late run sends only the most specific one.
-- State (`state.ts`, section `health`): `snapshots` per account id and `remindersSent`.
+- State (`state.ts`, section `health`): `snapshots` per account id and `remindersSent`. `moveHealth(ctx, fromId, toId)` moves both when `ipo init edit` changes an account's DP or username.
 - Command: `ipo doctor`.
