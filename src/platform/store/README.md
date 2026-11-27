@@ -3,7 +3,7 @@
 The only code that touches `config.json`. It owns:
 
 - the folder: `IPO_HOME`, else `~/.ipo` (mode 0700, file 0600)
-- the lock file `config.json.lock` (a lock older than 15 s is treated as left by a crash)
+- the lock file `config.json.lock`: it holds a random token and only its holder removes it. A lock older than 15 s is treated as left by a crash; a waiter takes it over by an atomic rename, so only one waiter wins
 - atomic writes: temp file, fsync, rename. A crash before the rename leaves the old file whole.
 - encryption: AES-256-GCM, key from the master password (PBKDF2). The master password is kept as a PBKDF2 hash.
 - migration: an old file is brought to the current `version` in memory and written in the new format on the next save.
