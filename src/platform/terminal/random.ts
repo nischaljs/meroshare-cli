@@ -18,15 +18,40 @@ function pick(chars: string): string {
   return chars[crypto.randomInt(chars.length)];
 }
 
-/** A random password that meets the policy, from crypto randomness. */
+export class PasswordPolicyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PasswordPolicyError';
+  }
+}
+
+/**
+ * A random password that meets the policy, from crypto randomness. Never longer than
+ * `maxLength`. Each class appears at least once when there is room. Throws
+ * `PasswordPolicyError` when the required counts cannot fit.
+ */
 export function generatePassword(policy: PasswordPolicy): string {
-  const length = Math.max(policy.minLength, 14, policy.upper + policy.lower + policy.digits + policy.special);
-  const size = policy.maxLength ? Math.min(length, policy.maxLength) : length;
+  const classes: [string, number][] = [
+    [UPPER, Math.max(0, policy.upper)],
+    [LOWER, Math.max(0, policy.lower)],
+    [DIGITS, Math.max(0, policy.digits)],
+    [SPECIAL, Math.max(0, policy.special)],
+  ];
+  const required = classes.reduce((n, [, c]) => n + c, 0);
+  const max = policy.maxLength;
+  if (max !== undefined && max > 0) {
+    if (required > max) {
+      throw new PasswordPolicyError(`The password rules ask for ${required} set characters but allow only ${max} in all.`);
+    }
+    if (policy.minLength > max) {
+      throw new PasswordPolicyError(`The password rules ask for at least ${policy.minLength} characters but allow only ${max}.`);
+    }
+  }
+  const wanted = Math.max(policy.minLength, 14, required);
+  const size = max !== undefined && max > 0 ? Math.min(wanted, max) : wanted;
   const out: string[] = [];
-  for (let i = 0; i < Math.max(1, policy.upper); i++) out.push(pick(UPPER));
-  for (let i = 0; i < Math.max(1, policy.lower); i++) out.push(pick(LOWER));
-  for (let i = 0; i < Math.max(1, policy.digits); i++) out.push(pick(DIGITS));
-  for (let i = 0; i < Math.max(1, policy.special); i++) out.push(pick(SPECIAL));
+  for (const [chars, count] of classes) for (let i = 0; i < count; i++) out.push(pick(chars));
+  for (const [chars, count] of classes) if (count === 0 && out.length < size) out.push(pick(chars));
   const all = UPPER + LOWER + DIGITS + SPECIAL;
   while (out.length < size) out.push(pick(all));
   for (let i = out.length - 1; i > 0; i--) {
