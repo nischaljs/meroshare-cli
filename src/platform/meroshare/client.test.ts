@@ -26,8 +26,8 @@ const ChangePassword = defineEndpoint<void, unknown>({
 });
 const OwnDetail = defineEndpoint<void, unknown>({ name: 'ownDetail', method: 'GET', path: '/meroShare/ownDetail/', kind: 'read', response: z.unknown() });
 
-function client(apiBase: string, waits: number[]) {
-  return createMeroShareClient({ apiBase, resultBase: apiBase, sleep: async (ms) => void waits.push(ms), random: () => 0 });
+function client(apiBase: string, waits: number[], timeoutMs?: number) {
+  return createMeroShareClient({ apiBase, resultBase: apiBase, sleep: async (ms) => void waits.push(ms), random: () => 0, timeoutMs });
 }
 
 test('a bot-check page on a read is retried with backoff, then succeeds', async () => {
@@ -105,4 +105,20 @@ test('Role Not Authorized is recognised and points to ipo doctor', async () => {
 test('a call that needs a token fails before sending without one', async () => {
   const c = createMeroShareClient({ apiBase: 'http://127.0.0.1:9/api' });
   await assert.rejects(c.call(Banks, undefined, null), (e: unknown) => e instanceof MeroShareError && e.kind === 'auth');
+});
+
+test('a hung read times out and is retried like a network error; a hung write is sent once with an unknown outcome', async () => {
+  const fake = await startFake({ users: [user], hang: ['/meroShare/bank/', '/meroShare/changePassword/'] });
+  try {
+    const c = client(fake.apiBase, [], 100);
+    const { token } = await c.login(Login, undefined);
+    await assert.rejects(c.call(Banks, undefined, { token }), (e: unknown) => e instanceof MeroShareError && e.kind === 'timeout');
+    assert.equal(fake.count('GET', '/meroShare/bank/'), 3);
+    const err = await c.call(ChangePassword, undefined, { token }).catch((e) => e);
+    assert.ok(err instanceof MeroShareError && err.kind === 'timeout' && !err.isDefiniteRejection);
+    assert.match(friendlyMessage(err), /may or may not have gone through/);
+    assert.equal(fake.count('POST', '/meroShare/changePassword/'), 1);
+  } finally {
+    await fake.close();
+  }
 });

@@ -42,6 +42,8 @@ export interface FakeOptions {
   policy?: unknown;
   partners?: unknown;
   initialDetails?: Record<string, unknown>;
+  /** Requests to these paths are never answered (a hung server). */
+  hang?: string[];
   /** Answers with 500 to the first n requests of these paths. */
   failFirst?: Record<string, number>;
 }
@@ -85,6 +87,8 @@ export async function startFake(opts: FakeOptions): Promise<FakeMeroShare> {
         res.writeHead(200, { 'content-type': 'text/html' });
         res.end('<!DOCTYPE html><html><body>Checking your browser</body></html>');
       };
+
+      if (opts.hang?.includes(path)) return;
 
       const left = failures.get(path);
       if (left) {

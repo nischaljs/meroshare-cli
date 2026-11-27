@@ -49,7 +49,7 @@ export function tempHome(): string {
  * A fake MeroShare, a store in a temp folder with the users as accounts, and a context
  * that waits for nothing and captures email. Never touches ~/.ipo.
  */
-export async function startApp(opts: FakeOptions & { now?: Date; email?: boolean }): Promise<TestApp> {
+export async function startApp(opts: FakeOptions & { now?: Date; email?: boolean; timeoutMs?: number }): Promise<TestApp> {
   const fake = await startFake(opts);
   const home = tempHome();
   const emails: EmailMessage[] = [];
@@ -57,7 +57,7 @@ export async function startApp(opts: FakeOptions & { now?: Date; email?: boolean
   let now = opts.now ?? new Date(2026, 10, 27, 10, 0, 0);
   const ctx = createContext({
     store: { home },
-    client: { apiBase: fake.apiBase, resultBase: fake.resultBase, sleep: async () => {} },
+    client: { apiBase: fake.apiBase, resultBase: fake.resultBase, sleep: async () => {}, timeoutMs: opts.timeoutMs },
     notifier: { print: (l) => printed.push(l), transport: async (_s, m) => void emails.push(m) },
     now: () => now,
     sleep: async () => {},
