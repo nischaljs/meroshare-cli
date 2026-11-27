@@ -1,0 +1,60 @@
+{
+  "masterPasswordHash": "3zCvOV6r7dt3FnS3hLOJAA==:rVNev7YVqAUa78BySlDBzMHpPE8D1LMVrk+biVXwRZoIhpDtUHFjmrrBYKWj/yfMWQFBNn/mmbSc5Q4NjB0cPQ==",
+  "salt": "qhgNF3fYpl043w5d6whK0hmtGWXkUrFmOxDgdaIBlIs=",
+  "iv": "",
+  "accounts": [
+    {
+      "name": "Ram",
+      "dpId": 1,
+      "dpName": "Test Capital",
+      "username": "00000001",
+      "password": "ivJ6Wz6SFvCCQADHR8bQmw==:rvYw8Uj92/Y/ACFQjSEP4Q==:gErCnWPcaf/Kdw==",
+      "boid": "130100000000000001",
+      "crn": "JEvJ9SAqATv4zjvAUh/vgg==:9tNgn32uOlUnVYlIWGiChA==:XSQgkwNQJ7GWrVKa",
+      "pin": "6t3RX3ogSuA/2BSNkd89DA==:n905DP0HDZjml7tpMw4flA==:k3A6Bw==",
+      "bankId": 7,
+      "bankName": "Test Bank",
+      "accountBranchId": 9,
+      "accountNumber": "0011",
+      "customerId": 501,
+      "demat": "130100000000000001"
+    },
+    {
+      "name": "Sita",
+      "dpId": 1,
+      "dpName": "Test Capital",
+      "username": "00000002",
+      "password": "lQaQvqQVqbJIARRfscTh9Q==:xAFO0xqWaHNNKbrIdTfQRw==:0FF3I5obnFtH2JQ=",
+      "boid": "130100000000000002",
+      "crn": "IfQeCTIbxQwJ/vez4Db/nw==:Dv39u3DVGc1oRreqD0W2nA==:mNWlCwevv9dEEAVQ",
+      "pin": "XAf4GaW79vb7HSW3tGpQFQ==:ISEfP1Tyr0uJt9laA1si9A==:uGcNJA==",
+      "bankId": 7,
+      "bankName": "Test Bank",
+      "accountBranchId": 9,
+      "accountNumber": "0011",
+      "customerId": 501,
+      "demat": "130100000000000002"
+    }
+  ],
+  "auto": {
+    "enabled": true,
+    "categories": [
+      "IPO"
+    ],
+    "sectors": [],
+    "maxKitta": 10,
+    "schedule": "0 10 * * *"
+  },
+  "email": {
+    "email": "me@example.test",
+    "appPassword": "sEIba/rIhT66Kgy53AnNFw==:sPVgODnXYeLJbe1TFMkocg==:BFj2U0qOTv46Ow==",
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 587,
+    "events": {
+      "applied": true,
+      "resultOut": true,
+      "allocated": true,
+      "notAllocated": false
+    }
+  }
+}
