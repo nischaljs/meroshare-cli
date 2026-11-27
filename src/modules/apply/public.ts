@@ -2,7 +2,6 @@ export {
   planApply,
   applyOne,
   runApply,
-  closeAll,
   autoKitta,
   autoApply,
   type ApplyPlan,

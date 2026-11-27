@@ -4,7 +4,7 @@ import { defineCommand } from '../../platform/command/public.js';
 import { createSpinner, createTable, log, unlockStore } from '../../platform/terminal/public.js';
 import { listAccounts } from '../accounts/public.js';
 import { hasActed } from '../issues/public.js';
-import { closeAll, planApply, runApply, type ApplyStatus, type Selection } from './apply.js';
+import { planApply, runApply, type ApplyStatus, type Selection } from './apply.js';
 
 const STATUS: Record<ApplyStatus, string> = {
   applied: chalk.green('APPLIED'),
@@ -26,12 +26,15 @@ export const applyCommand = defineCommand({
     const plan = await planApply(ctx, accounts);
     spinner.stop();
     for (const s of plan.skipped) log.warn(`Skipping ${s.account.name}: ${s.reason}`);
-    if (!plan.sessions.length) return log.error('No account can apply right now. Run "ipo doctor".');
+    if (!plan.sessions.length) {
+      await plan.release();
+      return log.error('No account can apply right now. Run "ipo doctor".');
+    }
 
     // the list comes from the first healthy account; "action" is that account's own
     const open = plan.issues;
     if (!open.length) {
-      await closeAll(ctx, plan.sessions);
+      await plan.release();
       return log.info('No open issues right now.');
     }
     console.log(
@@ -62,14 +65,14 @@ export const applyCommand = defineCommand({
         selections.push({ issue, kitta });
       }
       if (!selections.length) {
-        await closeAll(ctx, plan.sessions);
+        await plan.release();
         return log.info('No issues selected.');
       }
       console.log(chalk.bold('\n  Summary\n'));
       for (const s of selections) log.info(`${s.issue.companyName}: ${s.kitta} kitta x ${plan.sessions.length} account(s)`);
       await input({ message: 'Press Enter to apply (Ctrl+C to cancel):' });
     } catch (err) {
-      await closeAll(ctx, plan.sessions);
+      await plan.release();
       throw err;
     }
 
