@@ -2,9 +2,15 @@ import os from 'node:os';
 import path from 'node:path';
 import chalk from 'chalk';
 
+/**
+ * The OS timer starts the daily job once a day, so it runs `auto run` (one run, then exit), not `auto start`
+ * (which keeps running). It names this install by its full path: never npx, which could fetch an unrelated
+ * package named ipo. The job has no terminal, so it reads the master password from IPO_MASTER_PASSWORD,
+ * kept in a file only the user can read.
+ */
 export function getAutoStartInstructions(): string {
   const platform = os.platform();
-  const cliPath = 'npx ipo auto start';
+  const cliPath = `"${process.execPath}" "${process.argv[1]}" auto run`;
 
   switch (platform) {
     case 'linux':
@@ -12,7 +18,7 @@ export function getAutoStartInstructions(): string {
     case 'darwin':
       return getMacInstructions(cliPath);
     case 'win32':
-      return getWindowsInstructions();
+      return getWindowsInstructions(cliPath);
     default:
       return getGenericInstructions(cliPath);
   }
@@ -32,7 +38,9 @@ Description=IPO Auto-Apply Service
 [Service]
 Type=oneshot
 ExecStart=${cliPath}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin`)}
+EnvironmentFile=%h/.ipo/auto.env`)}
+
+   ${chalk.cyan('~/.ipo/auto.env')} holds one line, ${chalk.dim('IPO_MASTER_PASSWORD=...')}. Make it readable by you only: ${chalk.dim('chmod 600 ~/.ipo/auto.env')}
 
 2. Create ${chalk.cyan(timerFile)}:
 ${chalk.dim(`[Unit]
@@ -70,11 +78,16 @@ ${chalk.dim(`<?xml version="1.0" encoding="UTF-8"?>
   <string>com.ipo.auto</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/npx</string>
-    <string>ipo</string>
+    <string>${process.execPath}</string>
+    <string>${process.argv[1]}</string>
     <string>auto</string>
-    <string>start</string>
+    <string>run</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>IPO_MASTER_PASSWORD</key>
+    <string>your master password</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -85,12 +98,13 @@ ${chalk.dim(`<?xml version="1.0" encoding="UTF-8"?>
 </dict>
 </plist>`)}
 
+   The file holds your master password: ${chalk.dim(`chmod 600 ${plistPath}`)}
 2. Load: ${chalk.dim(`launchctl load ${plistPath}`)}
 3. Check: ${chalk.dim(`launchctl list | grep ipo`)}
 `;
 }
 
-function getWindowsInstructions(): string {
+function getWindowsInstructions(cliPath: string): string {
   return `
 ${chalk.bold('Windows (Task Scheduler)')}
 
@@ -99,8 +113,9 @@ ${chalk.bold('Windows (Task Scheduler)')}
 3. Trigger: Daily at 10:00 AM
 4. Action: Start a Program
    - Program: cmd.exe
-   - Arguments: /c npx ipo auto start
+   - Arguments: /c ${cliPath}
 5. Finish
+6. Set IPO_MASTER_PASSWORD as a user environment variable (System > Environment Variables)
 `;
 }
 
@@ -109,6 +124,8 @@ function getGenericInstructions(cliPath: string): string {
 ${chalk.bold('Generic (crontab)')}
 
 Add to crontab (${chalk.dim('crontab -e')}):
-${chalk.dim(`0 10 * * * ${cliPath}`)}
+${chalk.dim(`0 10 * * * . ~/.ipo/auto.env && export IPO_MASTER_PASSWORD && ${cliPath}`)}
+
+${chalk.cyan('~/.ipo/auto.env')} holds ${chalk.dim('IPO_MASTER_PASSWORD=...')}; ${chalk.dim('chmod 600 ~/.ipo/auto.env')}
 `;
 }
