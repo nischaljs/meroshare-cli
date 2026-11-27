@@ -72,6 +72,11 @@ export const applyStep: AutomationStep = {
   name: 'apply',
   order: 40,
   async run(ctx, bag) {
+    // checked here, not by the commands, so auto run, auto start and every cron run obey it
+    if (!bag.settings.enabled) {
+      bag.lines.push('apply: Auto-apply is off. Turn it on with ipo auto config.');
+      return;
+    }
     const { plan, results } = await autoApply(ctx, { categories: bag.settings.categories, maxKitta: bag.settings.maxKitta });
     for (const s of plan.skipped) bag.lines.push(`apply: skipped ${s.account.name}: ${s.reason}`);
     if (!results.length) bag.lines.push('apply: nothing to apply for');

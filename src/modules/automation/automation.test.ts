@@ -46,6 +46,18 @@ test('autoPassword on: the password is rotated first, then the account applies',
   }
 });
 
+test('auto-apply off: health and warnings run, nothing is applied', async () => {
+  const app = await startApp({ users: [{ dpId: 1, username: 'u1', password: 'p', name: 'Ram', issues: [issue] }] });
+  try {
+    const bag = await runDaily(app.ctx, settings({ enabled: false }));
+    assert.equal(app.fake.count('POST', '/meroShare/applicantForm/share/apply'), 0);
+    assert.ok(bag.lines.some((l) => l.startsWith('health: 1 account(s) checked')));
+    assert.ok(bag.lines.includes('apply: Auto-apply is off. Turn it on with ipo auto config.'));
+  } finally {
+    await app.close();
+  }
+});
+
 test('a step is added by the list only, runs by its order, and a failing step does not stop the rest', async () => {
   const app = await startApp({ users: [] });
   try {
