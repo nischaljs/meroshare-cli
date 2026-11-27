@@ -15,8 +15,8 @@ import {
   listAccounts,
   removeAccount,
   updateAccount,
-} from './accounts.js';
-import type { Account } from './state.js';
+  type Account,
+} from '../accounts/public.js';
 
 type Dp = Awaited<ReturnType<typeof getDpList>>[number];
 

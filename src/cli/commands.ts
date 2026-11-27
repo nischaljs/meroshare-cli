@@ -1,5 +1,5 @@
 import type { CommandDef } from '../platform/command/public.js';
-import { accountsCommand, initCommand } from '../modules/accounts/public.js';
+import { accountsCommand, initCommand } from '../modules/setup/public.js';
 import { applyCommand } from '../modules/apply/public.js';
 import { autoCommand } from '../modules/automation/public.js';
 import { fixCommand } from '../modules/fix/public.js';

@@ -10,7 +10,10 @@
     "build": "tsc",
     "dev": "tsx bin/cli.ts",
     "start": "node dist/bin/cli.js",
-    "ipo": "tsx bin/cli.ts"
+    "ipo": "tsx bin/cli.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
+    "lint:deps": "depcruise src bin test --config .dependency-cruiser.cjs",
+    "check": "tsc --noEmit && npm run lint:deps && npm test"
   },
   "keywords": [
     "nepse",
