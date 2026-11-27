@@ -1,23 +1,7 @@
 {
-  "name": "nepse-ipo",
+  "name": "meroshare-cli",
   "version": "1.0.0",
-  "description": "Apply for NEPSE IPOs from every family MeroShare account with one command. Runs only on your computer: passwords stay encrypted on your device and go to MeroShare only.",
-  "engines": {
-    "node": ">=18"
-  },
-  "type": "module",
-  "bin": {
-    "ipo": "./bin/ipo.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsx bin/cli.ts",
-    "start": "node dist/bin/cli.js",
-    "ipo": "tsx bin/cli.ts",
-    "test": "node --import tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
-    "lint:deps": "depcruise src bin test --config .dependency-cruiser.cjs",
-    "check": "tsc --noEmit && npm run lint:deps && npm test"
-  },
+  "description": "Apply for NEPSE IPOs on MeroShare from every family account with one command. Runs only on your computer: passwords stay encrypted on your device and go to MeroShare only.",
   "keywords": [
     "nepse",
     "ipo",
@@ -26,7 +10,40 @@
     "nepal",
     "stock"
   ],
+  "homepage": "https://github.com/nischaljs/meroshare-cli#readme",
+  "bugs": {
+    "url": "https://github.com/nischaljs/meroshare-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nischaljs/meroshare-cli.git"
+  },
   "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^18.17.0 || >=20.5.0"
+  },
+  "bin": {
+    "ipo": "./dist/bin/cli.js",
+    "meroshare-cli": "./dist/bin/cli.js"
+  },
+  "files": [
+    "dist/bin/**/*.js",
+    "dist/src/**/*.js",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "dev": "tsx bin/cli.ts",
+    "start": "node dist/bin/cli.js",
+    "ipo": "tsx bin/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
+    "lint:deps": "depcruise src bin test --config .dependency-cruiser.cjs",
+    "test:pack": "node scripts/test-pack.mjs",
+    "check": "npm run typecheck && npm run lint:deps && npm test && npm run test:pack"
+  },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
     "chalk": "^5.3.0",

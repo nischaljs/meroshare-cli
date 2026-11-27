@@ -115,7 +115,11 @@ ctx.store.section(AccountsSection).update(() =>
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const binDir = path.join(work, 'bin');
 fs.mkdirSync(binDir, { recursive: true });
-fs.writeFileSync(path.join(binDir, 'ipo'), `#!/usr/bin/env bash\nexec node ${JSON.stringify(path.join(repo, 'bin', 'ipo.js'))} "$@"\n`, { mode: 0o755 });
+fs.writeFileSync(
+  path.join(binDir, 'ipo'),
+  `#!/usr/bin/env bash\nexec ${JSON.stringify(path.join(repo, 'node_modules', '.bin', 'tsx'))} ${JSON.stringify(path.join(repo, 'bin', 'cli.ts'))} "$@"\n`,
+  { mode: 0o755 },
+);
 
 const env = {
   IPO_HOME: home,
