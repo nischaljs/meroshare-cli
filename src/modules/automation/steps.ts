@@ -1,6 +1,6 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { log, pacedMap } from '../../platform/terminal/public.js';
-import { autoApply } from '../apply/public.js';
+import { ApplyBusyError, autoApply } from '../apply/public.js';
 import { runDoctor, type HealthReport } from '../health/public.js';
 import { rotatePassword, rotationReason } from '../password/public.js';
 import { sendRenewalReminders } from '../renewal/public.js';
@@ -78,7 +78,15 @@ export const applyStep: AutomationStep = {
       bag.lines.push('apply: Auto-apply is off. Turn it on with ipo auto config.');
       return;
     }
-    const { plan, results } = await autoApply(ctx, { categories: bag.settings.categories, maxKitta: bag.settings.maxKitta }, bag.sessions);
+    let outcome;
+    try {
+      outcome = await autoApply(ctx, { categories: bag.settings.categories, maxKitta: bag.settings.maxKitta }, bag.sessions);
+    } catch (err) {
+      if (!(err instanceof ApplyBusyError)) throw err;
+      bag.lines.push(`apply: Another ipo apply is running (pid ${err.pid}). This run did not apply.`);
+      return;
+    }
+    const { plan, results } = outcome;
     for (const s of plan.skipped) bag.lines.push(`apply: skipped ${s.account.name}: ${s.reason}`);
     if (!results.length) bag.lines.push('apply: nothing to apply for');
     for (const r of results) bag.lines.push(`apply: ${r.account.name} ${r.company}: ${r.status} ${r.message}`);

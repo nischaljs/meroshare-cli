@@ -4,6 +4,8 @@ export {
   runApply,
   autoKitta,
   autoApply,
+  lockApply,
+  ApplyBusyError,
   type ApplyPlan,
   type ApplyResult,
   type ApplyStatus,

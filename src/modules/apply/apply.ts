@@ -1,5 +1,6 @@
 import type { AppContext } from '../../platform/context/public.js';
 import { MeroShareError, friendlyMessage } from '../../platform/meroshare/public.js';
+import { acquireRunLock, RunBusyError, type RunLock } from '../../platform/scheduler/public.js';
 import { pacedMap } from '../../platform/terminal/public.js';
 import { getBankDetail, getBanks, listAccounts, type Account } from '../accounts/public.js';
 import { checkSession, recordHealth, type HealthReport, loginFailedReport } from '../health/public.js';
@@ -189,21 +190,46 @@ export function autoKitta(issue: Issue, maxKitta: number): number | null {
 }
 
 /** Applies, with no prompts, for every open issue in the categories. */
+export class ApplyBusyError extends Error {
+  constructor(readonly pid: number) {
+    super('Another ipo apply is running');
+    this.name = 'ApplyBusyError';
+  }
+}
+
+/**
+ * One apply run at a time across processes (the apply command, auto run, the scheduler).
+ * Held from login to the last result. Throws `ApplyBusyError` while another run holds it.
+ */
+export function lockApply(ctx: AppContext): RunLock {
+  try {
+    return acquireRunLock(ctx.store.home, 'apply');
+  } catch (err) {
+    if (err instanceof RunBusyError) throw new ApplyBusyError(err.pid);
+    throw err;
+  }
+}
+
 export async function autoApply(
   ctx: AppContext,
   opts: AutoApplyOptions,
   pool?: SessionPool,
 ): Promise<{ plan: ApplyPlan; results: ApplyResult[] }> {
-  const plan = await planApply(ctx, listAccounts(ctx), pool);
-  const selections: Selection[] = [];
-  for (const issue of plan.issues) {
-    if (!matchesCategories(issue, opts.categories)) continue;
-    const kitta = autoKitta(issue, opts.maxKitta);
-    if (kitta !== null) selections.push({ issue, kitta });
+  const lock = lockApply(ctx);
+  try {
+    const plan = await planApply(ctx, listAccounts(ctx), pool);
+    const selections: Selection[] = [];
+    for (const issue of plan.issues) {
+      if (!matchesCategories(issue, opts.categories)) continue;
+      const kitta = autoKitta(issue, opts.maxKitta);
+      if (kitta !== null) selections.push({ issue, kitta });
+    }
+    if (!selections.length) {
+      await plan.release();
+      return { plan, results: [] };
+    }
+    return { plan, results: await runApply(ctx, plan, selections) };
+  } finally {
+    lock.release();
   }
-  if (!selections.length) {
-    await plan.release();
-    return { plan, results: [] };
-  }
-  return { plan, results: await runApply(ctx, plan, selections) };
 }

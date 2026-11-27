@@ -55,7 +55,7 @@ function readRecord(home?: string): PidRecord | null {
 }
 
 /** True when the record's process is alive and, where the OS lets us check, still runs the same command. */
-export function matchesRecord(record: PidRecord): boolean {
+export function matchesRecord(record: { pid: number; marker: string | null }): boolean {
   if (!alive(record.pid)) return false;
   if (!CAN_CHECK_PROCESS) return true;
   return record.marker !== null && processMarker(record.pid) === record.marker;

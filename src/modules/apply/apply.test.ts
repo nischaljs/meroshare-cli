@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planApply, runApply, autoApply, autoKitta } from './public.js';
+import { planApply, runApply, autoApply, autoKitta, lockApply, ApplyBusyError } from './public.js';
 import { startApp } from '../../../test/fake-meroshare/app.js';
 import type { FakeUser } from '../../../test/fake-meroshare/server.js';
 import type { Issue } from '../issues/public.js';
@@ -87,6 +87,23 @@ test('a passed expiry date with no MeroShare flag warns only: the account still 
     assert.equal(plan.reports[0].status, 'urgent');
     const results = await runApply(app.ctx, plan, [{ issue: plan.issues[0], kitta: 10 }]);
     assert.deepEqual(results.map((r) => r.status), ['applied']);
+  } finally {
+    await app.close();
+  }
+});
+
+test('a second apply run stops while one holds the apply lock, and sends nothing', async () => {
+  const app = await startApp({ users: [user('a')] });
+  try {
+    const held = lockApply(app.ctx);
+    try {
+      await assert.rejects(autoApply(app.ctx, { categories: ['IPO'], maxKitta: 20 }), (e: unknown) => e instanceof ApplyBusyError && e.message === 'Another ipo apply is running');
+      assert.equal(app.fake.count('POST', '/meroShare/auth/'), 0);
+    } finally {
+      held.release();
+    }
+    const { results } = await autoApply(app.ctx, { categories: ['IPO'], maxKitta: 20 });
+    assert.equal(results.length, 1);
   } finally {
     await app.close();
   }
